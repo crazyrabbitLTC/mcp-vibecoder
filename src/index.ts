@@ -25,10 +25,10 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 // Import core modules
-import { Feature, FeatureStorage, PhaseStatus } from './types.js';
+import { Feature, FeatureStorage, PhaseStatus, Phase, Task } from './types.js';
 import { features, storeFeature, getFeature, updateFeature, listFeatures } from './storage.js';
 import { 
-  DEFAULT_CLARIFICATION_QUESTIONS, 
+  DEFAULT_CLARIFICATION_QUESTIONS as CLARIFICATION_QUESTIONS, 
   getNextClarificationQuestion, 
   addClarificationResponse,
   formatClarificationResponses,
@@ -53,11 +53,16 @@ import {
 } from './phases.js';
 import { 
   generateId, 
-  createFeatureObject, 
-  createPhaseObject, 
-  createTaskObject, 
-  generateFeatureProgressSummary 
+  createFeatureObject,
+  createPhaseObject,
+  createTaskObject,
+  generateFeatureProgressSummary,
+  isValidPhaseStatus,
+  formatFeatureDetails,
+  createPhase as createPhaseFunc,
+  addTask as addTaskFunc,
 } from './utils.js';
+import { validateFeatureId, validatePhaseId, validateTaskId, validateFeaturePhaseTask, validateRequiredText, validatePhaseStatusValue } from './validators.js';
 
 /**
  * Type alias for a note object.
@@ -949,300 +954,445 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
  * Handles feature clarification, PRD generation, and more.
  */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  switch (request.params.name) {
-    case "start_feature_clarification": {
-      const featureName = String(request.params.arguments?.featureName || "");
-      const initialDescription = String(request.params.arguments?.initialDescription || "");
-      
-      // Create a new feature
-      const feature = createFeatureObject(featureName, initialDescription);
-      storeFeature(feature);
-      
-      // Get the first clarification question
-      const firstQuestion = getNextClarificationQuestion(feature);
-      
-      return {
-        content: [{
-          type: "text",
-          text: `Feature ID: ${feature.id}\n\nLet's clarify your feature request. ${firstQuestion}`
-        }]
-      };
-    }
-    
-    case "provide_clarification": {
-      const featureId = String(request.params.arguments?.featureId || "");
-      const question = String(request.params.arguments?.question || "");
-      const answer = String(request.params.arguments?.answer || "");
-      
-      // Validate inputs
-      if (!featureId) {
-        throw new Error("Feature ID is required");
-      }
-      
-      if (!question || !answer) {
-        throw new Error("Question and answer are required");
-      }
-      
-      // Get the feature
-      const feature = getFeature(featureId);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
-      
-      // Add the clarification response
-      const updatedFeature = addClarificationResponse(featureId, question, answer);
-      
-      // Get the next question
-      const nextQuestion = getNextClarificationQuestion(updatedFeature!);
-      
-      if (nextQuestion) {
+  try {
+    switch (request.params.name) {
+      case "start_feature_clarification": {
+        const featureName = String(request.params.arguments?.featureName || "");
+        const initialDescription = String(request.params.arguments?.initialDescription || "");
+        
+        // Validate inputs
+        const nameValidation = validateRequiredText(featureName, "Feature name", 2, 100);
+        if (!nameValidation.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${nameValidation.message}`
+            }]
+          };
+        }
+        
+        // Initial description is optional, but if provided, validate its length
+        if (initialDescription && initialDescription.trim() !== "") {
+          const descValidation = validateRequiredText(initialDescription, "Initial description", 1, 5000);
+          if (!descValidation.valid) {
+            return {
+              content: [{
+                type: "text", 
+                text: `Error: ${descValidation.message}`
+              }]
+            };
+          }
+        }
+        
+        // Create a new feature
+        const feature = createFeatureObject(nameValidation.data, initialDescription);
+        storeFeature(feature);
+        
+        // Get the first clarification question
+        const firstQuestion = getNextClarificationQuestion(feature);
+        
         return {
           content: [{
             type: "text",
-            text: `Response recorded. Next question: ${nextQuestion}`
-          }]
-        };
-      } else {
-        return {
-          content: [{
-            type: "text",
-            text: `All clarification questions answered! You can now generate a PRD using the generate_prd tool with featureId: ${featureId}`
-          }]
-        };
-      }
-    }
-    
-    case "generate_prd": {
-      const featureId = String(request.params.arguments?.featureId || "");
-      
-      // Validate inputs
-      if (!featureId) {
-        throw new Error("Feature ID is required");
-      }
-      
-      // Get the feature
-      const feature = getFeature(featureId);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
-      
-      // Generate the PRD
-      const prdContent = generatePRD(feature);
-      
-      // Update the feature with the PRD
-      updateFeature(featureId, { prdDoc: prdContent });
-      
-      return {
-        content: [{
-          type: "text",
-          text: `PRD generated successfully for ${feature.name}. You can view it at resource://feature/${featureId}/prd`
-        }]
-      };
-    }
-    
-    case "update_phase_status": {
-      const args = request.params.arguments || {};
-      const featureId = String(args.featureId || "");
-      const phaseId = String(args.phaseId || "");
-      const status = String(args.status || "");
-      
-      // Validate inputs
-      if (!featureId || !phaseId || !status) {
-        throw new Error("Feature ID, phase ID, and status are required");
-      }
-      
-      // Get the feature
-      const feature = getFeature(featureId);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
-      
-      // Get the phase
-      const phase = feature.phases.find(p => p.id === phaseId);
-      if (!phase) {
-        throw new Error(`Phase ${phaseId} not found`);
-      }
-      
-      // Validate the status transition
-      const validationResult = validatePhaseTransition(phase.status, status as PhaseStatus);
-      if (!validationResult.valid) {
-        throw new Error(validationResult.message);
-      }
-      
-      // Update the phase status
-      const updatedPhase = updatePhaseStatus(featureId, phaseId, status as PhaseStatus);
-      
-      return {
-        content: [{
-          type: "text",
-          text: `Phase "${phase.name}" status updated to "${status}"`
-        }]
-      };
-    }
-    
-    case "add_task": {
-      const args = request.params.arguments || {};
-      const featureId = String(args.featureId || "");
-      const phaseId = String(args.phaseId || "");
-      const description = String(args.description || "");
-      
-      // Validate inputs
-      if (!featureId || !phaseId || !description) {
-        throw new Error("Feature ID, phase ID, and task description are required");
-      }
-      
-      // Get the feature
-      const feature = getFeature(featureId);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
-      
-      // Get the phase
-      const phase = feature.phases.find(p => p.id === phaseId);
-      if (!phase) {
-        throw new Error(`Phase ${phaseId} not found`);
-      }
-      
-      // Add the task
-      const updatedPhase = addTask(featureId, phaseId, description);
-      
-      return {
-        content: [{
-          type: "text",
-          text: `Task added to phase "${phase.name}"`
-        }]
-      };
-    }
-    
-    case "update_task_status": {
-      const args = request.params.arguments || {};
-      const featureId = String(args.featureId || "");
-      const phaseId = String(args.phaseId || "");
-      const taskId = String(args.taskId || "");
-      const completed = args.completed === true;
-      
-      // Validate inputs
-      if (!featureId || !phaseId || !taskId || args.completed === undefined) {
-        throw new Error("Feature ID, phase ID, task ID, and completed status are required");
-      }
-      
-      // Get the feature
-      const feature = getFeature(featureId);
-      if (!feature) {
-        throw new Error(`Feature with ID ${featureId} not found`);
-      }
-      
-      // Get the phase
-      const phase = feature.phases.find(p => p.id === phaseId);
-      if (!phase) {
-        throw new Error(`Phase with ID ${phaseId} not found in feature ${feature.name}`);
-      }
-      
-      // Get the task
-      const task = phase.tasks.find(t => t.id === taskId);
-      if (!task) {
-        throw new Error(`Task with ID ${taskId} not found`);
-      }
-      
-      // Update the task status
-      const updatedTask = updateTaskStatus(featureId, phaseId, taskId, completed);
-      
-      // Check if all tasks are completed
-      let message = `Task status updated to ${completed ? 'completed' : 'not completed'}`;
-      
-      if (completed && phase.tasks.every(t => t.completed)) {
-        message += `. All tasks in phase "${phase.name}" are now completed. Consider updating the phase status to "completed".`;
-      }
-      
-      return {
-        content: [{
-          type: "text",
-          text: message
-        }]
-      };
-    }
-    
-    case "create_phase": {
-      const args = request.params.arguments || {};
-      const featureId = String(args.featureId || "");
-      const name = String(args.name || "");
-      const description = String(args.description || "");
-      
-      // Validate inputs
-      if (!featureId || !name || !description) {
-        throw new Error("Feature ID, name, and description are required");
-      }
-      
-      // Get the feature
-      const feature = getFeature(featureId);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
-      
-      // Create the phase
-      const phase = createPhase(featureId, name, description);
-      
-      return {
-        content: [{
-          type: "text",
-          text: `Phase "${name}" created for feature "${feature.name}"`
-        }]
-      };
-    }
-    
-    case "get_next_phase_action": {
-      const args = request.params.arguments || {};
-      const featureId = String(args.featureId || "");
-      
-      // Validate inputs
-      if (!featureId) {
-        throw new Error("Feature ID is required");
-      }
-      
-      // Get the feature
-      const feature = getFeature(featureId);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
-      
-      // Find the current active phase
-      const currentPhase = feature.phases.find(p => p.status === 'pending' || p.status === 'in_progress');
-      
-      if (!currentPhase) {
-        return {
-          content: [{
-            type: "text",
-            text: 'All phases are completed or reviewed. The feature implementation is done!'
+            text: `Feature ID: ${feature.id}\n\nLet's clarify your feature request. ${firstQuestion}`
           }]
         };
       }
       
-      // Check task completion status
-      const completedTasks = currentPhase.tasks.filter(t => t.completed);
-      const pendingTasks = currentPhase.tasks.filter(t => !t.completed);
-      
-      // Determine next action
-      let message;
-      if (currentPhase.status === 'pending') {
-        message = `Phase "${currentPhase.name}" is pending. Start working on this phase by setting its status to "in_progress".`;
-      } else if (pendingTasks.length > 0) {
-        message = `${completedTasks.length}/${currentPhase.tasks.length} tasks are completed in phase "${currentPhase.name}". Continue working on pending tasks: ${pendingTasks.map(t => `"${t.description}"`).join(', ')}`;
-      } else if (currentPhase.tasks.length === 0) {
-        message = `Phase "${currentPhase.name}" has no tasks defined. Add tasks or mark the phase as completed if appropriate.`;
-      } else {
-        message = `All tasks in phase "${currentPhase.name}" are completed. Consider marking this phase as completed.`;
+      case "provide_clarification": {
+        const featureId = String(request.params.arguments?.featureId || "");
+        const question = String(request.params.arguments?.question || "");
+        const answer = String(request.params.arguments?.answer || "");
+        
+        // Validate inputs
+        const featureResult = validateFeatureId(featureId);
+        if (!featureResult.valid) {
+          return {
+            content: [{
+              type: "text", 
+              text: `Error: ${featureResult.message}`
+            }]
+          };
+        }
+        
+        const questionValidation = validateRequiredText(question, "Question", 5, 1000);
+        if (!questionValidation.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${questionValidation.message}`
+            }]
+          };
+        }
+        
+        const answerValidation = validateRequiredText(answer, "Answer", 1, 5000);
+        if (!answerValidation.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${answerValidation.message}`
+            }]
+          };
+        }
+        
+        const feature = featureResult.data;
+        
+        // Store the clarification response
+        if (!feature.clarifications) {
+          feature.clarifications = {};
+        }
+        
+        feature.clarifications[question] = answer;
+        
+        // Get the next question or indicate completion
+        const nextQuestion = getNextClarificationQuestion(feature);
+        
+        if (nextQuestion) {
+          return {
+            content: [{
+              type: "text",
+              text: `Response recorded. ${nextQuestion}`
+            }]
+          };
+        } else {
+          return {
+            content: [{
+              type: "text",
+              text: "All clarification questions have been answered. You can now generate a PRD for this feature."
+            }]
+          };
+        }
       }
       
-      return {
-        content: [{
-          type: "text",
-          text: message
-        }]
-      };
+      case "generate_prd": {
+        const featureId = String(request.params.arguments?.featureId || "");
+        
+        // Validate feature ID
+        const featureResult = validateFeatureId(featureId);
+        if (!featureResult.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${featureResult.message}`
+            }]
+          };
+        }
+        
+        const feature = featureResult.data;
+        
+        // Check if clarifications are complete
+        if (!feature.clarifications || Object.keys(feature.clarifications).length < CLARIFICATION_QUESTIONS.length) {
+          return {
+            content: [{
+              type: "text",
+              text: "Error: Please complete all clarification questions before generating a PRD."
+            }]
+          };
+        }
+        
+        // Generate PRD and implementation plan
+        const prdDoc = generatePRD(feature);
+        const implementationPlan = generateImplementationPlan(feature);
+        
+        // Store the documents
+        feature.prdDoc = prdDoc;
+        feature.implementationPlan = implementationPlan;
+        
+        return {
+          content: [{
+            type: "text",
+            text: `PRD and Implementation Plan generated for feature ${feature.name}. You can view them using the resource URIs: feature://${feature.id}/prd and feature://${feature.id}/implementation`
+          }]
+        };
+      }
+      
+      case "create_phase": {
+        const featureId = String(request.params.arguments?.featureId || "");
+        const phaseName = String(request.params.arguments?.name || "");
+        const phaseDescription = String(request.params.arguments?.description || "");
+        const tasksJson = String(request.params.arguments?.tasks || "[]");
+        
+        // Validate feature ID
+        const featureResult = validateFeatureId(featureId);
+        if (!featureResult.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${featureResult.message}`
+            }]
+          };
+        }
+        
+        // Validate phase name
+        const nameValidation = validateRequiredText(phaseName, "Phase name", 2, 100);
+        if (!nameValidation.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${nameValidation.message}`
+            }]
+          };
+        }
+        
+        // Validate phase description (optional but if provided, validate)
+        if (phaseDescription && phaseDescription.trim() !== "") {
+          const descValidation = validateRequiredText(phaseDescription, "Phase description", 5, 1000);
+          if (!descValidation.valid) {
+            return {
+              content: [{
+                type: "text",
+                text: `Error: ${descValidation.message}`
+              }]
+            };
+          }
+        }
+        
+        // Parse and validate tasks
+        let tasks = [];
+        try {
+          tasks = JSON.parse(tasksJson);
+          if (!Array.isArray(tasks)) {
+            return {
+              content: [{
+                type: "text",
+                text: "Error: Tasks must be a valid JSON array of task descriptions"
+              }]
+            };
+          }
+          
+          // Validate each task description
+          for (let i = 0; i < tasks.length; i++) {
+            const taskDesc = tasks[i];
+            if (typeof taskDesc !== 'string' || taskDesc.trim().length < 3) {
+              return {
+                content: [{
+                  type: "text",
+                  text: `Error: Task at index ${i} must be a string with at least 3 characters`
+                }]
+              };
+            }
+          }
+        } catch (e) {
+          return {
+            content: [{
+              type: "text",
+              text: "Error: Could not parse tasks JSON. Please provide a valid JSON array."
+            }]
+          };
+        }
+        
+        const feature = featureResult.data;
+        
+        // Create the phase with validated inputs
+        const phaseId = generateId();
+        const phase = createPhaseFunc(feature.id, phaseId, nameValidation.data, phaseDescription);
+        
+        // Add tasks if provided
+        if (tasks.length > 0) {
+          tasks.forEach(taskDesc => {
+            addTaskFunc(feature.id, phaseId, taskDesc);
+          });
+        }
+        
+        return {
+          content: [{
+            type: "text",
+            text: `Phase "${phaseName}" created with ID: ${phaseId}`
+          }]
+        };
+      }
+      
+      case "update_phase_status": {
+        const featureId = String(request.params.arguments?.featureId || "");
+        const phaseId = String(request.params.arguments?.phaseId || "");
+        const status = String(request.params.arguments?.status || "");
+        
+        // Validate feature and phase
+        const validationResult = validateFeaturePhaseTask(featureId, phaseId);
+        if (!validationResult.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${validationResult.message}`
+            }]
+          };
+        }
+        
+        // Validate status
+        const statusValidation = validatePhaseStatusValue(status);
+        if (!statusValidation.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${statusValidation.message}`
+            }]
+          };
+        }
+        
+        const { feature, phase } = validationResult.data;
+        
+        // Update the phase status
+        const updatedPhase = updatePhaseStatus(featureId, phaseId, statusValidation.data);
+        
+        return {
+          content: [{
+            type: "text",
+            text: `Phase status updated to "${status}"`
+          }]
+        };
+      }
+      
+      case "add_task": {
+        const featureId = String(request.params.arguments?.featureId || "");
+        const phaseId = String(request.params.arguments?.phaseId || "");
+        const taskDescription = String(request.params.arguments?.description || "");
+        
+        // Validate feature and phase
+        const validationResult = validateFeaturePhaseTask(featureId, phaseId);
+        if (!validationResult.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${validationResult.message}`
+            }]
+          };
+        }
+        
+        // Validate task description
+        const descValidation = validateRequiredText(taskDescription, "Task description", 3, 500);
+        if (!descValidation.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${descValidation.message}`
+            }]
+          };
+        }
+        
+        const { feature, phase } = validationResult.data;
+        
+        // Add the task
+        const taskId = addTask(featureId, phaseId, descValidation.data);
+        
+        return {
+          content: [{
+            type: "text",
+            text: `Task added to phase "${phase.name}" with ID: ${taskId}`
+          }]
+        };
+      }
+      
+      case "update_task_status": {
+        const featureId = String(request.params.arguments?.featureId || "");
+        const phaseId = String(request.params.arguments?.phaseId || "");
+        const taskId = String(request.params.arguments?.taskId || "");
+        const completed = Boolean(request.params.arguments?.completed);
+        
+        // Validate feature, phase and task
+        const validationResult = validateFeaturePhaseTask(featureId, phaseId, taskId);
+        if (!validationResult.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${validationResult.message}`
+            }]
+          };
+        }
+        
+        const { feature, phase, task } = validationResult.data;
+        
+        // Update the task status
+        const updatedTask = updateTaskStatus(featureId, phaseId, taskId, completed);
+        
+        // Check if all tasks are completed and suggest phase update if applicable
+        let message = `Task status updated to ${completed ? 'completed' : 'not completed'}`;
+        
+        if (completed && phase.tasks.every((t: Task) => t.id === taskId || t.completed)) {
+          // All tasks are now completed
+          message += `. All tasks in phase ${phase.name} are now completed. Consider updating the phase status to 'completed'.`;
+        }
+        
+        return {
+          content: [{
+            type: "text",
+            text: message
+          }]
+        };
+      }
+      
+      case "get_next_phase_action": {
+        const featureId = String(request.params.arguments?.featureId || "");
+        
+        // Validate feature ID
+        const featureResult = validateFeatureId(featureId);
+        if (!featureResult.valid) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: ${featureResult.message}`
+            }]
+          };
+        }
+        
+        const feature = featureResult.data;
+        
+        // Find the current active phase (first non-completed/reviewed phase)
+        const currentPhase = feature.phases.find((p: Phase) => p.status === 'pending' || p.status === 'in_progress');
+        
+        if (!currentPhase) {
+          // All phases are completed or reviewed
+          return {
+            content: [{
+              type: "text",
+              text: 'All phases are completed or reviewed. The feature implementation is done!'
+            }]
+          };
+        }
+        
+        // Check task completion status
+        const completedTasks = currentPhase.tasks.filter((t: Task) => t.completed);
+        const pendingTasks = currentPhase.tasks.filter((t: Task) => !t.completed);
+        
+        // Determine next action based on phase and task status
+        let message = '';
+        
+        if (currentPhase.status === 'pending') {
+          message = `Phase "${currentPhase.name}" is pending. Start working on this phase by setting its status to "in_progress".`;
+        } else if (currentPhase.status === 'in_progress') {
+          if (pendingTasks.length > 0) {
+            message = `${completedTasks.length}/${currentPhase.tasks.length} tasks are completed in phase "${currentPhase.name}". Continue working on pending tasks.`;
+          } else if (currentPhase.tasks.length === 0) {
+            message = `Phase "${currentPhase.name}" has no tasks defined. Add tasks or mark the phase as completed if appropriate.`;
+          } else {
+            // All tasks are completed
+            message = `All tasks in phase "${currentPhase.name}" are completed. Consider marking this phase as completed.`;
+          }
+        }
+        
+        return {
+          content: [{
+            type: "text",
+            text: message
+          }]
+        };
+      }
+      
+      default:
+        return {
+          content: [{
+            type: "text",
+            text: `Error: Unknown tool "${request.params.name}"`
+          }]
+        };
     }
-    
-    default:
-      throw new Error(`Unknown tool: ${request.params.name}`);
+  } catch (error: any) {
+    console.error('Error executing tool:', error);
+    return {
+      content: [{
+        type: "text",
+        text: `An unexpected error occurred: ${error.message || 'Unknown error'}`
+      }]
+    };
   }
 });
 
