@@ -34,9 +34,9 @@
 - [x] Add support for phase and task status viewing
 
 ## Step 6: Tool Implementation
-- [ ] Define all tool schemas and validations
-- [ ] Implement error handling for tools
-- [ ] Ensure proper argument validation
+- [x] Define all tool schemas and validations
+- [x] Implement error handling for tools
+- [x] Ensure proper argument validation
 - [ ] Add support for tool discoverability
 - [ ] Test tool invocations with example data
 
