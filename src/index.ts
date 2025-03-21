@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
 /**
- * This is a template MCP server that implements a simple notes system.
- * It demonstrates core MCP concepts like resources and tools by allowing:
- * - Listing notes as resources
- * - Reading individual notes
- * - Creating new notes via a tool
- * - Summarizing all notes via a prompt
+ * @file Vibe-Coder MCP Server
+ * @version 0.1.0
+ * 
+ * This MCP server implements a structured development workflow that helps
+ * LLM-based coders build features in an organized, clean, and safe manner.
+ * 
+ * Core functionalities:
+ * - Feature request clarification through iterative questioning
+ * - PRD and implementation plan generation
+ * - Phased development with tasks and status tracking
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -19,6 +23,11 @@ import {
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+
+// Import core modules
+import { Feature, FeatureStorage } from './types.js';
+import { features, storeFeature, getFeature, updateFeature, listFeatures } from './storage.js';
+import { generateId, createFeatureObject, createPhaseObject, createTaskObject } from './utils.js';
 
 /**
  * Type alias for a note object.
@@ -35,19 +44,18 @@ const notes: { [id: string]: Note } = {
 };
 
 /**
- * Create an MCP server with capabilities for resources (to list/read notes),
- * tools (to create new notes), and prompts (to summarize notes).
+ * Create an MCP server with capabilities for resources, tools, and prompts
  */
 const server = new Server(
   {
-    name: "My MCP vibecoding server",
+    name: "Vibe-Coder MCP Server",
     version: "0.1.0",
   },
   {
     capabilities: {
-      resources: {},
-      tools: {},
-      prompts: {},
+      resources: {}, // Expose resources for features, PRDs, and implementation plans
+      tools: {},     // Provide tools for feature clarification and development
+      prompts: {},   // Supply prompts for guiding the development process
     },
   }
 );
@@ -212,6 +220,11 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
  * This allows the server to communicate via standard input/output streams.
  */
 async function main() {
+  console.error("Starting Vibe-Coder MCP Server...");
+  
+  // Setup tool and resource handlers
+  // (These will be implemented in subsequent sections)
+  
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
