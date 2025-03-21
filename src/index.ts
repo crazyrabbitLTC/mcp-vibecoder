@@ -25,7 +25,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 // Import core modules
-import { Feature, FeatureStorage } from './types.js';
+import { Feature, FeatureStorage, PhaseStatus } from './types.js';
 import { features, storeFeature, getFeature, updateFeature, listFeatures } from './storage.js';
 import { generateId, createFeatureObject, createPhaseObject, createTaskObject } from './utils.js';
 import { 
@@ -43,6 +43,15 @@ import {
   extractRequirementsFromClarifications,
   extractTechnicalSpecsFromClarifications
 } from './documentation.js';
+import { 
+  createPhase, 
+  getPhase, 
+  updatePhaseStatus,
+  getNextPhaseStatus,
+  validatePhaseTransition,
+  addTask,
+  updateTaskStatus
+} from './phases.js';
 
 /**
  * Type alias for a note object.
@@ -348,6 +357,306 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             implementationPlan
           };
         }
+      },
+      {
+        name: 'create_phase',
+        description: 'Create a new development phase for a feature',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            featureId: {
+              type: 'string',
+              description: 'ID of the feature to create a phase for'
+            },
+            name: {
+              type: 'string',
+              description: 'Name of the phase'
+            },
+            description: {
+              type: 'string',
+              description: 'Description of the phase'
+            }
+          },
+          required: ['featureId', 'name', 'description']
+        },
+        handler: async (params: {featureId: string, name: string, description: string}) => {
+          const { featureId, name, description } = params;
+          const feature = getFeature(featureId);
+          
+          if (!feature) {
+            return {
+              error: `Feature with ID ${featureId} not found`
+            };
+          }
+          
+          // Create the phase
+          const phase = createPhase(featureId, name, description);
+          
+          return {
+            success: true,
+            message: `Phase ${name} created for feature ${feature.name}`,
+            phase
+          };
+        }
+      },
+      {
+        name: 'update_phase_status',
+        description: 'Update the status of a development phase',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            featureId: {
+              type: 'string',
+              description: 'ID of the feature containing the phase'
+            },
+            phaseId: {
+              type: 'string',
+              description: 'ID of the phase to update'
+            },
+            status: {
+              type: 'string',
+              description: 'New status for the phase (pending, in_progress, completed, reviewed)'
+            }
+          },
+          required: ['featureId', 'phaseId', 'status']
+        },
+        handler: async (params: {featureId: string, phaseId: string, status: PhaseStatus}) => {
+          const { featureId, phaseId, status } = params;
+          const feature = getFeature(featureId);
+          
+          if (!feature) {
+            return {
+              error: `Feature with ID ${featureId} not found`
+            };
+          }
+          
+          const phase = feature.phases.find(p => p.id === phaseId);
+          
+          if (!phase) {
+            return {
+              error: `Phase with ID ${phaseId} not found in feature ${feature.name}`
+            };
+          }
+          
+          // Validate the status transition
+          const validationResult = validatePhaseTransition(phase.status, status);
+          
+          if (!validationResult.valid) {
+            return {
+              error: validationResult.message
+            };
+          }
+          
+          // Update the phase status
+          const updatedPhase = updatePhaseStatus(featureId, phaseId, status);
+          
+          return {
+            success: true,
+            message: `Phase ${phase.name} status updated to ${status}`,
+            phase: updatedPhase
+          };
+        }
+      },
+      {
+        name: 'add_task',
+        description: 'Add a task to a development phase',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            featureId: {
+              type: 'string',
+              description: 'ID of the feature containing the phase'
+            },
+            phaseId: {
+              type: 'string',
+              description: 'ID of the phase to add the task to'
+            },
+            description: {
+              type: 'string',
+              description: 'Description of the task'
+            }
+          },
+          required: ['featureId', 'phaseId', 'description']
+        },
+        handler: async (params: {featureId: string, phaseId: string, description: string}) => {
+          const { featureId, phaseId, description } = params;
+          const feature = getFeature(featureId);
+          
+          if (!feature) {
+            return {
+              error: `Feature with ID ${featureId} not found`
+            };
+          }
+          
+          const phase = feature.phases.find(p => p.id === phaseId);
+          
+          if (!phase) {
+            return {
+              error: `Phase with ID ${phaseId} not found in feature ${feature.name}`
+            };
+          }
+          
+          // Add the task to the phase
+          const updatedPhase = addTask(featureId, phaseId, description);
+          
+          return {
+            success: true,
+            message: `Task added to phase ${phase.name}`,
+            phase: updatedPhase
+          };
+        }
+      },
+      {
+        name: 'update_task_status',
+        description: 'Update the completion status of a task',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            featureId: {
+              type: 'string',
+              description: 'ID of the feature containing the phase'
+            },
+            phaseId: {
+              type: 'string',
+              description: 'ID of the phase containing the task'
+            },
+            taskId: {
+              type: 'string',
+              description: 'ID of the task to update'
+            },
+            completed: {
+              type: 'boolean',
+              description: 'Whether the task is completed'
+            }
+          },
+          required: ['featureId', 'phaseId', 'taskId', 'completed']
+        },
+        handler: async (params: {featureId: string, phaseId: string, taskId: string, completed: boolean}) => {
+          const { featureId, phaseId, taskId, completed } = params;
+          const feature = getFeature(featureId);
+          
+          if (!feature) {
+            return {
+              error: `Feature with ID ${featureId} not found`
+            };
+          }
+          
+          const phase = feature.phases.find(p => p.id === phaseId);
+          
+          if (!phase) {
+            return {
+              error: `Phase with ID ${phaseId} not found in feature ${feature.name}`
+            };
+          }
+          
+          const task = phase.tasks.find(t => t.id === taskId);
+          
+          if (!task) {
+            return {
+              error: `Task with ID ${taskId} not found in phase ${phase.name}`
+            };
+          }
+          
+          // Update the task status
+          const updatedTask = updateTaskStatus(featureId, phaseId, taskId, completed);
+          
+          // Check if all tasks are completed and suggest phase update if applicable
+          let message = `Task status updated to ${completed ? 'completed' : 'not completed'}`;
+          
+          if (completed && phase.tasks.every(t => t.id === taskId || t.completed)) {
+            // All tasks are now completed
+            message += `. All tasks in phase ${phase.name} are now completed. Consider updating the phase status to 'completed'.`;
+          }
+          
+          return {
+            success: true,
+            message,
+            task: updatedTask
+          };
+        }
+      },
+      {
+        name: 'get_next_phase_action',
+        description: 'Get guidance on what to do next in the current phase or whether to move to the next phase',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            featureId: {
+              type: 'string',
+              description: 'ID of the feature'
+            }
+          },
+          required: ['featureId']
+        },
+        handler: async (params: {featureId: string}) => {
+          const { featureId } = params;
+          const feature = getFeature(featureId);
+          
+          if (!feature) {
+            return {
+              error: `Feature with ID ${featureId} not found`
+            };
+          }
+          
+          // Find the current active phase (first non-completed/reviewed phase)
+          const currentPhase = feature.phases.find(p => p.status === 'pending' || p.status === 'in_progress');
+          
+          if (!currentPhase) {
+            // All phases are completed or reviewed
+            return {
+              message: 'All phases are completed or reviewed. The feature implementation is done!',
+              recommendedAction: 'Feature implementation is complete. Consider reviewing the entire feature.'
+            };
+          }
+          
+          // Check task completion status
+          const completedTasks = currentPhase.tasks.filter(t => t.completed);
+          const pendingTasks = currentPhase.tasks.filter(t => !t.completed);
+          
+          // Determine next action based on phase and task status
+          if (currentPhase.status === 'pending') {
+            return {
+              message: `Phase "${currentPhase.name}" is pending. Start working on this phase by setting its status to "in_progress".`,
+              recommendedAction: 'Set phase status to "in_progress"',
+              phaseId: currentPhase.id,
+              phaseName: currentPhase.name,
+              status: 'in_progress'
+            };
+          } else if (currentPhase.status === 'in_progress') {
+            if (pendingTasks.length > 0) {
+              return {
+                message: `${completedTasks.length}/${currentPhase.tasks.length} tasks are completed in phase "${currentPhase.name}". Continue working on pending tasks.`,
+                recommendedAction: 'Complete the pending tasks',
+                pendingTasks: pendingTasks.map(t => ({ id: t.id, description: t.description })),
+                phaseId: currentPhase.id,
+                phaseName: currentPhase.name
+              };
+            } else if (currentPhase.tasks.length === 0) {
+              return {
+                message: `Phase "${currentPhase.name}" has no tasks defined. Add tasks or mark the phase as completed if appropriate.`,
+                recommendedAction: 'Add tasks to the phase or mark it as completed',
+                phaseId: currentPhase.id,
+                phaseName: currentPhase.name
+              };
+            } else {
+              // All tasks are completed
+              return {
+                message: `All tasks in phase "${currentPhase.name}" are completed. Consider marking this phase as completed.`,
+                recommendedAction: 'Set phase status to "completed"',
+                phaseId: currentPhase.id,
+                phaseName: currentPhase.name,
+                status: 'completed'
+              };
+            }
+          }
+          
+          // This code should not be reached, but just in case
+          return {
+            message: `Phase "${currentPhase.name}" is in status "${currentPhase.status}" with ${completedTasks.length}/${currentPhase.tasks.length} tasks completed.`,
+            phaseId: currentPhase.id,
+            phaseName: currentPhase.name
+          };
+        }
       }
     ]
   };
@@ -445,6 +754,207 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [{
           type: "text",
           text: `PRD generated successfully for ${feature.name}. You can view it at resource://feature/${featureId}/prd`
+        }]
+      };
+    }
+    
+    case "update_phase_status": {
+      const args = request.params.arguments || {};
+      const featureId = String(args.featureId || "");
+      const phaseId = String(args.phaseId || "");
+      const status = String(args.status || "");
+      
+      // Validate inputs
+      if (!featureId || !phaseId || !status) {
+        throw new Error("Feature ID, phase ID, and status are required");
+      }
+      
+      // Get the feature
+      const feature = getFeature(featureId);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Get the phase
+      const phase = feature.phases.find(p => p.id === phaseId);
+      if (!phase) {
+        throw new Error(`Phase ${phaseId} not found`);
+      }
+      
+      // Validate the status transition
+      const validationResult = validatePhaseTransition(phase.status, status as PhaseStatus);
+      if (!validationResult.valid) {
+        throw new Error(validationResult.message);
+      }
+      
+      // Update the phase status
+      const updatedPhase = updatePhaseStatus(featureId, phaseId, status as PhaseStatus);
+      
+      return {
+        content: [{
+          type: "text",
+          text: `Phase "${phase.name}" status updated to "${status}"`
+        }]
+      };
+    }
+    
+    case "add_task": {
+      const args = request.params.arguments || {};
+      const featureId = String(args.featureId || "");
+      const phaseId = String(args.phaseId || "");
+      const description = String(args.description || "");
+      
+      // Validate inputs
+      if (!featureId || !phaseId || !description) {
+        throw new Error("Feature ID, phase ID, and task description are required");
+      }
+      
+      // Get the feature
+      const feature = getFeature(featureId);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Get the phase
+      const phase = feature.phases.find(p => p.id === phaseId);
+      if (!phase) {
+        throw new Error(`Phase ${phaseId} not found`);
+      }
+      
+      // Add the task
+      const updatedPhase = addTask(featureId, phaseId, description);
+      
+      return {
+        content: [{
+          type: "text",
+          text: `Task added to phase "${phase.name}"`
+        }]
+      };
+    }
+    
+    case "update_task_status": {
+      const args = request.params.arguments || {};
+      const featureId = String(args.featureId || "");
+      const phaseId = String(args.phaseId || "");
+      const taskId = String(args.taskId || "");
+      const completed = args.completed === true;
+      
+      // Validate inputs
+      if (!featureId || !phaseId || !taskId || args.completed === undefined) {
+        throw new Error("Feature ID, phase ID, task ID, and completed status are required");
+      }
+      
+      // Get the feature
+      const feature = getFeature(featureId);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Get the phase
+      const phase = feature.phases.find(p => p.id === phaseId);
+      if (!phase) {
+        throw new Error(`Phase ${phaseId} not found`);
+      }
+      
+      // Get the task
+      const task = phase.tasks.find(t => t.id === taskId);
+      if (!task) {
+        throw new Error(`Task ${taskId} not found`);
+      }
+      
+      // Update the task status
+      const updatedTask = updateTaskStatus(featureId, phaseId, taskId, completed);
+      
+      // Check if all tasks are completed
+      let message = `Task status updated to ${completed ? 'completed' : 'not completed'}`;
+      
+      if (completed && phase.tasks.every(t => t.completed)) {
+        message += `. All tasks in phase "${phase.name}" are now completed. Consider updating the phase status to "completed".`;
+      }
+      
+      return {
+        content: [{
+          type: "text",
+          text: message
+        }]
+      };
+    }
+    
+    case "create_phase": {
+      const args = request.params.arguments || {};
+      const featureId = String(args.featureId || "");
+      const name = String(args.name || "");
+      const description = String(args.description || "");
+      
+      // Validate inputs
+      if (!featureId || !name || !description) {
+        throw new Error("Feature ID, name, and description are required");
+      }
+      
+      // Get the feature
+      const feature = getFeature(featureId);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Create the phase
+      const phase = createPhase(featureId, name, description);
+      
+      return {
+        content: [{
+          type: "text",
+          text: `Phase "${name}" created for feature "${feature.name}"`
+        }]
+      };
+    }
+    
+    case "get_next_phase_action": {
+      const args = request.params.arguments || {};
+      const featureId = String(args.featureId || "");
+      
+      // Validate inputs
+      if (!featureId) {
+        throw new Error("Feature ID is required");
+      }
+      
+      // Get the feature
+      const feature = getFeature(featureId);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Find the current active phase
+      const currentPhase = feature.phases.find(p => p.status === 'pending' || p.status === 'in_progress');
+      
+      if (!currentPhase) {
+        return {
+          content: [{
+            type: "text",
+            text: 'All phases are completed or reviewed. The feature implementation is done!'
+          }]
+        };
+      }
+      
+      // Check task completion status
+      const completedTasks = currentPhase.tasks.filter(t => t.completed);
+      const pendingTasks = currentPhase.tasks.filter(t => !t.completed);
+      
+      // Determine next action
+      let message;
+      if (currentPhase.status === 'pending') {
+        message = `Phase "${currentPhase.name}" is pending. Start working on this phase by setting its status to "in_progress".`;
+      } else if (pendingTasks.length > 0) {
+        message = `${completedTasks.length}/${currentPhase.tasks.length} tasks are completed in phase "${currentPhase.name}". Continue working on pending tasks: ${pendingTasks.map(t => `"${t.description}"`).join(', ')}`;
+      } else if (currentPhase.tasks.length === 0) {
+        message = `Phase "${currentPhase.name}" has no tasks defined. Add tasks or mark the phase as completed if appropriate.`;
+      } else {
+        message = `All tasks in phase "${currentPhase.name}" are completed. Consider marking this phase as completed.`;
+      }
+      
+      return {
+        content: [{
+          type: "text",
+          text: message
         }]
       };
     }
