@@ -3,7 +3,7 @@
  * This module handles the iterative questioning to clarify feature requests.
  */
 import { Feature, ClarificationResponse } from './types.js';
-import { updateFeature } from './storage.js';
+import { updateFeature, getFeature } from './storage.js';
 import { now } from './utils.js';
 
 /**
@@ -25,44 +25,40 @@ export const DEFAULT_CLARIFICATION_QUESTIONS = [
  * @returns The next question to ask or null if all questions have been answered
  */
 export function getNextClarificationQuestion(feature: Feature): string | null {
-  // This will be fully implemented in Step 2
-  
-  // For now, just return the first question if no responses yet
-  if (feature.clarificationResponses.length === 0) {
-    return DEFAULT_CLARIFICATION_QUESTIONS[0];
-  }
-  
-  // If we've asked all questions, return null
+  // Check if we've asked all the default questions
   if (feature.clarificationResponses.length >= DEFAULT_CLARIFICATION_QUESTIONS.length) {
     return null;
   }
   
-  // Otherwise, return the next question
+  // Get the next question based on the number of responses
   return DEFAULT_CLARIFICATION_QUESTIONS[feature.clarificationResponses.length];
 }
 
 /**
  * Add a clarification response to a feature
- * @param feature The feature to add the response to
+ * @param featureId The ID of the feature to add the response to
  * @param question The question that was asked
  * @param answer The user's answer
- * @returns The updated feature
+ * @returns The updated feature or undefined if not found
  */
 export function addClarificationResponse(
   featureId: string,
   question: string,
   answer: string
 ): Feature | undefined {
-  // This will be fully implemented in Step 2
+  const feature = getFeature(featureId);
+  if (!feature) return undefined;
+  
+  // Create a new response
+  const newResponse: ClarificationResponse = {
+    question,
+    answer,
+    timestamp: now()
+  };
+  
+  // Update the feature with the new response
   return updateFeature(featureId, {
-    clarificationResponses: [
-      ...updateFeature(featureId, {})?.clarificationResponses || [],
-      {
-        question,
-        answer,
-        timestamp: now()
-      }
-    ]
+    clarificationResponses: [...feature.clarificationResponses, newResponse]
   });
 }
 
@@ -72,5 +68,30 @@ export function addClarificationResponse(
  * @returns Formatted text
  */
 export function formatClarificationResponses(responses: ClarificationResponse[]): string {
+  if (responses.length === 0) {
+    return "No clarification responses yet.";
+  }
+  
   return responses.map(cr => `Q: ${cr.question}\nA: ${cr.answer}`).join('\n\n');
+}
+
+/**
+ * Check if a feature has completed the clarification process
+ * @param feature The feature to check
+ * @returns True if clarification is complete, false otherwise
+ */
+export function isClarificationComplete(feature: Feature): boolean {
+  return feature.clarificationResponses.length >= DEFAULT_CLARIFICATION_QUESTIONS.length;
+}
+
+/**
+ * Get a summary of the clarification status
+ * @param feature The feature to get the status for
+ * @returns A text summary of the clarification status
+ */
+export function getClarificationStatus(feature: Feature): string {
+  const total = DEFAULT_CLARIFICATION_QUESTIONS.length;
+  const completed = feature.clarificationResponses.length;
+  
+  return `Clarification progress: ${completed}/${total} questions answered.`;
 } 

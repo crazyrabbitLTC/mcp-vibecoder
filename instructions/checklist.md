@@ -8,10 +8,10 @@
 - [x] Implement basic utilities (generateId, etc.)
 
 ## Step 2: Feature Clarification Implementation
-- [ ] Create tool for initiating feature clarification
-- [ ] Implement tool for receiving clarification responses
-- [ ] Create resource to retrieve clarification status
-- [ ] Add support for structured questioning workflow
+- [x] Create tool for initiating feature clarification
+- [x] Implement tool for receiving clarification responses
+- [x] Create resource to retrieve clarification status
+- [x] Add support for structured questioning workflow
 
 ## Step 3: PRD and Implementation Plan Generation
 - [ ] Create tool for generating PRD document

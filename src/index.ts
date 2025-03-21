@@ -28,6 +28,13 @@ import {
 import { Feature, FeatureStorage } from './types.js';
 import { features, storeFeature, getFeature, updateFeature, listFeatures } from './storage.js';
 import { generateId, createFeatureObject, createPhaseObject, createTaskObject } from './utils.js';
+import { 
+  DEFAULT_CLARIFICATION_QUESTIONS, 
+  getNextClarificationQuestion, 
+  addClarificationResponse,
+  formatClarificationResponses
+} from './clarification.js';
+import { generatePRD, generateImplementationPlan } from './documentation.js';
 
 /**
  * Type alias for a note object.
@@ -61,68 +68,197 @@ const server = new Server(
 );
 
 /**
- * Handler for listing available notes as resources.
- * Each note is exposed as a resource with:
- * - A note:// URI scheme
- * - Plain text MIME type
- * - Human readable name and description (now including the note title)
+ * Handler for listing available resources.
+ * Exposes:
+ * - A list of all features
+ * - Individual feature details
+ * - PRD and implementation plan documents
  */
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
-    resources: Object.entries(notes).map(([id, note]) => ({
-      uri: `note:///${id}`,
-      mimeType: "text/plain",
-      name: note.title,
-      description: `A text note: ${note.title}`
-    }))
+    resources: [
+      {
+        uri: "features://list",
+        mimeType: "text/plain",
+        name: "Features List",
+        description: "Lists all features being developed"
+      },
+      ...listFeatures().flatMap(feature => [
+        {
+          uri: `feature://${feature.id}`,
+          mimeType: "text/plain", 
+          name: feature.name,
+          description: `Details about feature: ${feature.name}`
+        },
+        {
+          uri: `feature://${feature.id}/prd`,
+          mimeType: "text/markdown",
+          name: `${feature.name} PRD`,
+          description: `PRD document for feature: ${feature.name}`
+        },
+        {
+          uri: `feature://${feature.id}/implementation`,
+          mimeType: "text/markdown",
+          name: `${feature.name} Implementation Plan`,
+          description: `Implementation plan for feature: ${feature.name}`
+        }
+      ])
+    ]
   };
 });
 
 /**
- * Handler for reading the contents of a specific note.
- * Takes a note:// URI and returns the note content as plain text.
+ * Handler for reading feature resources.
+ * Supports:
+ * - List of all features
+ * - Individual feature details
+ * - PRD and implementation plan documents
  */
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const url = new URL(request.params.uri);
-  const id = url.pathname.replace(/^\//, '');
-  const note = notes[id];
-
-  if (!note) {
-    throw new Error(`Note ${id} not found`);
+  
+  // Handle list of all features
+  if (url.protocol === "features:") {
+    if (url.pathname === "/list") {
+      return {
+        contents: [{
+          uri: request.params.uri,
+          mimeType: "text/plain",
+          text: listFeatures().map(f => `${f.id}: ${f.name}`).join("\n")
+        }]
+      };
+    }
   }
+  
+  // Handle feature-specific resources
+  if (url.protocol === "feature:") {
+    const parts = url.pathname.split('/').filter(Boolean);
+    const featureId = parts[0];
+    const feature = getFeature(featureId);
+    
+    if (!feature) {
+      throw new Error(`Feature ${featureId} not found`);
+    }
+    
+    // Return feature details
+    if (parts.length === 1) {
+      const timestamp = feature.updatedAt.toISOString();
+      const clarifications = formatClarificationResponses(feature.clarificationResponses);
+      const phasesText = feature.phases.map(p => 
+        `- ${p.name} (${p.status}): ${p.tasks.filter(t => t.completed).length}/${p.tasks.length} tasks completed`
+      ).join('\n');
+      
+      const featureDetails = `
+Feature: ${feature.name}
+ID: ${feature.id}
+Description: ${feature.description}
+Last Updated: ${timestamp}
 
-  return {
-    contents: [{
-      uri: request.params.uri,
-      mimeType: "text/plain",
-      text: note.content
-    }]
-  };
+Clarification Responses:
+${clarifications}
+
+Phases (${feature.phases.length}):
+${phasesText}
+`;
+      
+      return {
+        contents: [{
+          uri: request.params.uri,
+          mimeType: "text/plain",
+          text: featureDetails
+        }]
+      };
+    }
+    
+    // Return PRD document
+    if (parts[1] === "prd") {
+      const prdContent = feature.prdDoc || generatePRD(feature);
+      
+      return {
+        contents: [{
+          uri: request.params.uri,
+          mimeType: "text/markdown",
+          text: prdContent
+        }]
+      };
+    }
+    
+    // Return implementation plan document
+    if (parts[1] === "implementation") {
+      const implContent = feature.implDoc || generateImplementationPlan(feature);
+      
+      return {
+        contents: [{
+          uri: request.params.uri,
+          mimeType: "text/markdown",
+          text: implContent
+        }]
+      };
+    }
+  }
+  
+  throw new Error("Resource not found");
 });
 
 /**
  * Handler that lists available tools.
- * Exposes a single "create_note" tool that lets clients create new notes.
+ * Exposes tools for feature clarification and development.
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "create_note",
-        description: "Create a new note",
+        name: "start_feature_clarification",
+        description: "Start the clarification process for a new feature",
         inputSchema: {
           type: "object",
           properties: {
-            title: {
+            featureName: {
               type: "string",
-              description: "Title of the note"
+              description: "Name of the feature"
             },
-            content: {
+            initialDescription: {
               type: "string",
-              description: "Text content of the note"
+              description: "Initial description of the feature"
             }
           },
-          required: ["title", "content"]
+          required: ["featureName"]
+        }
+      },
+      {
+        name: "provide_clarification",
+        description: "Provide answer to a clarification question",
+        inputSchema: {
+          type: "object",
+          properties: {
+            featureId: {
+              type: "string",
+              description: "ID of the feature"
+            },
+            question: {
+              type: "string",
+              description: "Clarification question"
+            },
+            answer: {
+              type: "string",
+              description: "Answer to the clarification question"
+            }
+          },
+          required: ["featureId", "question", "answer"]
+        }
+      },
+      {
+        name: "generate_prd",
+        description: "Generate a PRD document based on clarification responses",
+        inputSchema: {
+          type: "object",
+          properties: {
+            featureId: {
+              type: "string",
+              description: "ID of the feature"
+            }
+          },
+          required: ["featureId"]
         }
       }
     ]
@@ -130,89 +266,147 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 });
 
 /**
- * Handler for the create_note tool.
- * Creates a new note with the provided title and content, and returns success message.
+ * Handler for implementing MCP tools.
+ * Handles feature clarification, PRD generation, and more.
  */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   switch (request.params.name) {
-    case "create_note": {
-      const title = String(request.params.arguments?.title);
-      const content = String(request.params.arguments?.content);
-      if (!title || !content) {
-        throw new Error("Title and content are required");
-      }
-
-      const id = String(Object.keys(notes).length + 1);
-      notes[id] = { title, content };
-
+    case "start_feature_clarification": {
+      const featureName = String(request.params.arguments?.featureName || "");
+      const initialDescription = String(request.params.arguments?.initialDescription || "");
+      
+      // Create a new feature
+      const feature = createFeatureObject(featureName, initialDescription);
+      storeFeature(feature);
+      
+      // Get the first clarification question
+      const firstQuestion = getNextClarificationQuestion(feature);
+      
       return {
         content: [{
           type: "text",
-          text: `Created note ${id}: ${title}`
+          text: `Feature ID: ${feature.id}\n\nLet's clarify your feature request. ${firstQuestion}`
         }]
       };
     }
-
+    
+    case "provide_clarification": {
+      const featureId = String(request.params.arguments?.featureId || "");
+      const question = String(request.params.arguments?.question || "");
+      const answer = String(request.params.arguments?.answer || "");
+      
+      // Validate inputs
+      if (!featureId) {
+        throw new Error("Feature ID is required");
+      }
+      
+      if (!question || !answer) {
+        throw new Error("Question and answer are required");
+      }
+      
+      // Get the feature
+      const feature = getFeature(featureId);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Add the clarification response
+      const updatedFeature = addClarificationResponse(featureId, question, answer);
+      
+      // Get the next question
+      const nextQuestion = getNextClarificationQuestion(updatedFeature!);
+      
+      if (nextQuestion) {
+        return {
+          content: [{
+            type: "text",
+            text: `Response recorded. Next question: ${nextQuestion}`
+          }]
+        };
+      } else {
+        return {
+          content: [{
+            type: "text",
+            text: `All clarification questions answered! You can now generate a PRD using the generate_prd tool with featureId: ${featureId}`
+          }]
+        };
+      }
+    }
+    
+    case "generate_prd": {
+      const featureId = String(request.params.arguments?.featureId || "");
+      
+      // Validate inputs
+      if (!featureId) {
+        throw new Error("Feature ID is required");
+      }
+      
+      // Get the feature
+      const feature = getFeature(featureId);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Generate the PRD
+      const prdContent = generatePRD(feature);
+      
+      // Update the feature with the PRD
+      updateFeature(featureId, { prdDoc: prdContent });
+      
+      return {
+        content: [{
+          type: "text",
+          text: `PRD generated successfully for ${feature.name}. You can view it at resource://feature/${featureId}/prd`
+        }]
+      };
+    }
+    
     default:
-      throw new Error("Unknown tool");
+      throw new Error(`Unknown tool: ${request.params.name}`);
   }
 });
 
 /**
  * Handler that lists available prompts.
- * Exposes a single "summarize_notes" prompt that summarizes all notes.
  */
 server.setRequestHandler(ListPromptsRequestSchema, async () => {
   return {
     prompts: [
       {
-        name: "summarize_notes",
-        description: "Summarize all notes",
+        name: "clarify_feature",
+        description: "Guide to clarify a feature request through questioning"
       }
     ]
   };
 });
 
 /**
- * Handler for the summarize_notes prompt.
- * Returns a prompt that requests summarization of all notes, with the notes' contents embedded as resources.
+ * Handler for the clarify_feature prompt.
+ * Returns a prompt that guides feature clarification.
  */
 server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-  if (request.params.name !== "summarize_notes") {
-    throw new Error("Unknown prompt");
+  if (request.params.name === "clarify_feature") {
+    return {
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: "Help me clarify this feature request by asking questions about:"
+          }
+        },
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: "1. The specific problem it solves\n2. The target users\n3. Key requirements\n4. Success criteria\n5. Technical constraints\n\nAsk one question at a time, analyze the response, then proceed to the next most relevant question."
+          }
+        }
+      ]
+    };
   }
-
-  const embeddedNotes = Object.entries(notes).map(([id, note]) => ({
-    type: "resource" as const,
-    resource: {
-      uri: `note:///${id}`,
-      mimeType: "text/plain",
-      text: note.content
-    }
-  }));
-
-  return {
-    messages: [
-      {
-        role: "user",
-        content: {
-          type: "text",
-          text: "Please summarize the following notes:"
-        }
-      },
-      ...embeddedNotes.map(note => ({
-        role: "user" as const,
-        content: note
-      })),
-      {
-        role: "user",
-        content: {
-          type: "text",
-          text: "Provide a concise summary of all the notes above."
-        }
-      }
-    ]
-  };
+  
+  throw new Error("Unknown prompt");
 });
 
 /**
@@ -221,9 +415,6 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
  */
 async function main() {
   console.error("Starting Vibe-Coder MCP Server...");
-  
-  // Setup tool and resource handlers
-  // (These will be implemented in subsequent sections)
   
   const transport = new StdioServerTransport();
   await server.connect(transport);
