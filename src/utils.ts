@@ -2,6 +2,8 @@
  * Utility functions for the Vibe-Coder MCP Server
  */
 
+import { Feature, Phase, Task, PhaseStatus } from './types.js';
+
 /**
  * Generate a unique ID for features, phases, tasks, etc.
  * @returns A random string ID
@@ -92,4 +94,69 @@ export function createTaskObject(description: string): any {
  */
 export function isValidPhaseStatus(status: string): boolean {
   return ['pending', 'in_progress', 'completed', 'reviewed'].includes(status);
+}
+
+/**
+ * Generate a detailed progress summary for a feature
+ * @param feature The feature to generate a summary for
+ * @returns A formatted string with the feature's progress details
+ */
+export function generateFeatureProgressSummary(feature: Feature): string {
+  const totalPhases = feature.phases.length;
+  const completedPhases = feature.phases.filter((p: Phase) => p.status === 'completed' || p.status === 'reviewed').length;
+  const inProgressPhases = feature.phases.filter((p: Phase) => p.status === 'in_progress').length;
+  
+  const totalTasks = feature.phases.reduce((acc: number, phase: Phase) => acc + phase.tasks.length, 0);
+  const completedTasks = feature.phases.reduce(
+    (acc: number, phase: Phase) => acc + phase.tasks.filter((t: Task) => t.completed).length, 0
+  );
+  
+  const phaseProgress = totalPhases > 0 
+    ? Math.round((completedPhases / totalPhases) * 100) 
+    : 0;
+    
+  const taskProgress = totalTasks > 0 
+    ? Math.round((completedTasks / totalTasks) * 100) 
+    : 0;
+  
+  let summary = `
+# Feature Progress: ${feature.name}
+
+## Overview
+- Feature ID: ${feature.id}
+- Created: ${feature.createdAt.toISOString()}
+- Last Updated: ${feature.updatedAt.toISOString()}
+- Description: ${feature.description}
+
+## Progress Summary
+- Phases: ${completedPhases}/${totalPhases} completed (${phaseProgress}%)
+- Tasks: ${completedTasks}/${totalTasks} completed (${taskProgress}%)
+- Phases in Progress: ${inProgressPhases}
+
+## Phase Details
+`;
+
+  if (totalPhases === 0) {
+    summary += "\nNo phases defined for this feature yet.";
+  } else {
+    feature.phases.forEach((phase: Phase) => {
+      const phaseTasks = phase.tasks.length;
+      const phaseCompletedTasks = phase.tasks.filter((t: Task) => t.completed).length;
+      const phaseTaskProgress = phaseTasks > 0 
+        ? Math.round((phaseCompletedTasks / phaseTasks) * 100) 
+        : 0;
+      
+      summary += `
+### ${phase.name} (${phase.status})
+- ID: ${phase.id}
+- Progress: ${phaseCompletedTasks}/${phaseTasks} tasks (${phaseTaskProgress}%)
+- Description: ${phase.description}
+
+Tasks:
+${phase.tasks.map((task: Task) => `- [${task.completed ? 'x' : ' '}] ${task.description}`).join('\n')}
+`;
+    });
+  }
+  
+  return summary;
 } 

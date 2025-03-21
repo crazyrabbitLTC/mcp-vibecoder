@@ -27,11 +27,11 @@
 - [x] Implement phase workflow progression logic
 
 ## Step 5: Resource Implementation
-- [ ] Create resources for listing all features
-- [ ] Add resources for accessing feature details
-- [ ] Implement resources for retrieving PRDs
-- [ ] Create resources for retrieving implementation plans
-- [ ] Add support for phase and task status viewing
+- [x] Create resources for listing all features
+- [x] Add resources for accessing feature details
+- [x] Implement resources for retrieving PRDs
+- [x] Create resources for retrieving implementation plans
+- [x] Add support for phase and task status viewing
 
 ## Step 6: Tool Implementation
 - [ ] Define all tool schemas and validations

@@ -27,7 +27,6 @@ import {
 // Import core modules
 import { Feature, FeatureStorage, PhaseStatus } from './types.js';
 import { features, storeFeature, getFeature, updateFeature, listFeatures } from './storage.js';
-import { generateId, createFeatureObject, createPhaseObject, createTaskObject } from './utils.js';
 import { 
   DEFAULT_CLARIFICATION_QUESTIONS, 
   getNextClarificationQuestion, 
@@ -52,6 +51,13 @@ import {
   addTask,
   updateTaskStatus
 } from './phases.js';
+import { 
+  generateId, 
+  createFeatureObject, 
+  createPhaseObject, 
+  createTaskObject, 
+  generateFeatureProgressSummary 
+} from './utils.js';
 
 /**
  * Type alias for a note object.
@@ -90,6 +96,7 @@ const server = new Server(
  * - A list of all features
  * - Individual feature details
  * - PRD and implementation plan documents
+ * - Phase and task details
  */
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
@@ -100,12 +107,24 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
         name: "Features List",
         description: "Lists all features being developed"
       },
+      {
+        uri: "features://status",
+        mimeType: "text/markdown",
+        name: "Project Status",
+        description: "Provides a summary of all features and their development status"
+      },
       ...listFeatures().flatMap(feature => [
         {
           uri: `feature://${feature.id}`,
           mimeType: "text/plain", 
           name: feature.name,
           description: `Details about feature: ${feature.name}`
+        },
+        {
+          uri: `feature://${feature.id}/progress`,
+          mimeType: "text/markdown",
+          name: `${feature.name} Progress Report`,
+          description: `Detailed progress report for feature: ${feature.name}`
         },
         {
           uri: `feature://${feature.id}/prd`,
@@ -118,7 +137,39 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
           mimeType: "text/markdown",
           name: `${feature.name} Implementation Plan`,
           description: `Implementation plan for feature: ${feature.name}`
-        }
+        },
+        {
+          uri: `feature://${feature.id}/phases`,
+          mimeType: "text/plain",
+          name: `${feature.name} Phases`,
+          description: `Lists all phases for feature: ${feature.name}`
+        },
+        {
+          uri: `feature://${feature.id}/tasks`,
+          mimeType: "text/plain",
+          name: `${feature.name} All Tasks`,
+          description: `Lists all tasks across all phases for feature: ${feature.name}`
+        },
+        ...feature.phases.flatMap(phase => [
+          {
+            uri: `feature://${feature.id}/phase/${phase.id}`,
+            mimeType: "text/plain",
+            name: `${feature.name} - ${phase.name}`,
+            description: `Details about phase: ${phase.name} for feature: ${feature.name}`
+          },
+          {
+            uri: `feature://${feature.id}/phase/${phase.id}/tasks`,
+            mimeType: "text/plain",
+            name: `${feature.name} - ${phase.name} Tasks`,
+            description: `Lists all tasks for phase: ${phase.name}`
+          },
+          ...phase.tasks.map(task => ({
+            uri: `feature://${feature.id}/phase/${phase.id}/task/${task.id}`,
+            mimeType: "text/plain",
+            name: `Task: ${task.description.substring(0, 30)}${task.description.length > 30 ? '...' : ''}`,
+            description: `Details about task: ${task.description.substring(0, 50)}${task.description.length > 50 ? '...' : ''}`
+          }))
+        ])
       ])
     ]
   };
@@ -130,6 +181,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
  * - List of all features
  * - Individual feature details
  * - PRD and implementation plan documents
+ * - Phase and task details
  */
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const url = new URL(request.params.uri);
@@ -142,6 +194,45 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           uri: request.params.uri,
           mimeType: "text/plain",
           text: listFeatures().map(f => `${f.id}: ${f.name}`).join("\n")
+        }]
+      };
+    }
+    
+    if (url.pathname === "/status") {
+      const features = listFeatures();
+      
+      if (features.length === 0) {
+        return {
+          contents: [{
+            uri: request.params.uri,
+            mimeType: "text/markdown",
+            text: "# Project Status\n\nNo features have been created yet."
+          }]
+        };
+      }
+      
+      const featuresStatus = features.map(feature => {
+        const totalPhases = feature.phases.length;
+        const completedPhases = feature.phases.filter(p => p.status === 'completed' || p.status === 'reviewed').length;
+        const totalTasks = feature.phases.reduce((acc, phase) => acc + phase.tasks.length, 0);
+        const completedTasks = feature.phases.reduce(
+          (acc, phase) => acc + phase.tasks.filter(t => t.completed).length, 0
+        );
+        
+        return `## ${feature.name}
+- ID: ${feature.id}
+- Status: ${completedPhases === totalPhases && totalPhases > 0 ? 'Completed' : 'In Progress'}
+- Phases: ${completedPhases}/${totalPhases} completed
+- Tasks: ${completedTasks}/${totalTasks} completed
+- [View Details](feature://${feature.id}/progress)
+`;
+      }).join('\n');
+      
+      return {
+        contents: [{
+          uri: request.params.uri,
+          mimeType: "text/markdown",
+          text: `# Project Status\n\n${featuresStatus}`
         }]
       };
     }
@@ -187,6 +278,19 @@ ${phasesText}
       };
     }
     
+    // Return feature progress report
+    if (parts[1] === "progress") {
+      const progressReport = generateFeatureProgressSummary(feature);
+      
+      return {
+        contents: [{
+          uri: request.params.uri,
+          mimeType: "text/markdown",
+          text: progressReport
+        }]
+      };
+    }
+    
     // Return PRD document
     if (parts[1] === "prd") {
       const prdContent = feature.prdDoc || generatePRD(feature);
@@ -211,6 +315,184 @@ ${phasesText}
           text: implContent
         }]
       };
+    }
+    
+    // Return phase listing
+    if (parts[1] === "phases") {
+      if (feature.phases.length === 0) {
+        return {
+          contents: [{
+            uri: request.params.uri,
+            mimeType: "text/plain",
+            text: `No phases defined for feature: ${feature.name}`
+          }]
+        };
+      }
+      
+      const phasesContent = feature.phases.map(phase => {
+        const completedTasks = phase.tasks.filter(t => t.completed).length;
+        const totalTasks = phase.tasks.length;
+        return `Phase: ${phase.name} (ID: ${phase.id})
+Status: ${phase.status}
+Description: ${phase.description}
+Progress: ${completedTasks}/${totalTasks} tasks completed
+Last Updated: ${phase.updatedAt.toISOString()}
+`;
+      }).join('\n---\n\n');
+      
+      return {
+        contents: [{
+          uri: request.params.uri,
+          mimeType: "text/plain",
+          text: `# Phases for Feature: ${feature.name}\n\n${phasesContent}`
+        }]
+      };
+    }
+    
+    // Handle list of all tasks for a feature
+    if (parts[1] === "tasks") {
+      const allTasks = feature.phases.flatMap(phase => 
+        phase.tasks.map(task => ({
+          ...task,
+          phaseName: phase.name,
+          phaseId: phase.id,
+          phaseStatus: phase.status
+        }))
+      );
+      
+      if (allTasks.length === 0) {
+        return {
+          contents: [{
+            uri: request.params.uri,
+            mimeType: "text/plain",
+            text: `No tasks defined for feature: ${feature.name}`
+          }]
+        };
+      }
+      
+      const pendingTasks = allTasks.filter(t => !t.completed);
+      const completedTasks = allTasks.filter(t => t.completed);
+      
+      const pendingTasksText = pendingTasks.length > 0 
+        ? pendingTasks.map(task => `- [ ] ${task.description} (ID: ${task.id}, Phase: ${task.phaseName})`).join('\n')
+        : "No pending tasks.";
+        
+      const completedTasksText = completedTasks.length > 0
+        ? completedTasks.map(task => `- [x] ${task.description} (ID: ${task.id}, Phase: ${task.phaseName})`).join('\n')
+        : "No completed tasks.";
+      
+      const tasksContent = `# All Tasks for Feature: ${feature.name}
+
+## Pending Tasks (${pendingTasks.length})
+${pendingTasksText}
+
+## Completed Tasks (${completedTasks.length})
+${completedTasksText}
+`;
+      
+      return {
+        contents: [{
+          uri: request.params.uri,
+          mimeType: "text/plain",
+          text: tasksContent
+        }]
+      };
+    }
+    
+    // Handle phase-specific resources
+    if (parts[1] === "phase" && parts.length >= 3) {
+      const phaseId = parts[2];
+      const phase = feature.phases.find(p => p.id === phaseId);
+      
+      if (!phase) {
+        throw new Error(`Phase ${phaseId} not found in feature ${feature.name}`);
+      }
+      
+      // Return phase details
+      if (parts.length === 3) {
+        const completedTasks = phase.tasks.filter(t => t.completed).length;
+        const totalTasks = phase.tasks.length;
+        
+        const taskList = phase.tasks.map(task => 
+          `- [${task.completed ? 'x' : ' '}] ${task.description} (ID: ${task.id})`
+        ).join('\n');
+        
+        const phaseDetails = `
+Phase: ${phase.name}
+ID: ${phase.id}
+Status: ${phase.status}
+Description: ${phase.description}
+Created: ${phase.createdAt.toISOString()}
+Last Updated: ${phase.updatedAt.toISOString()}
+Progress: ${completedTasks}/${totalTasks} tasks completed
+
+Tasks:
+${taskList}
+`;
+        
+        return {
+          contents: [{
+            uri: request.params.uri,
+            mimeType: "text/plain",
+            text: phaseDetails
+          }]
+        };
+      }
+      
+      // Return task listing
+      if (parts[3] === "tasks") {
+        if (phase.tasks.length === 0) {
+          return {
+            contents: [{
+              uri: request.params.uri,
+              mimeType: "text/plain",
+              text: `No tasks defined for phase: ${phase.name}`
+            }]
+          };
+        }
+        
+        const tasksContent = phase.tasks.map(task => `
+Task: ${task.description}
+ID: ${task.id}
+Status: ${task.completed ? 'Completed' : 'Pending'}
+Created: ${task.createdAt.toISOString()}
+Last Updated: ${task.updatedAt.toISOString()}
+`).join('\n---\n');
+        
+        return {
+          contents: [{
+            uri: request.params.uri,
+            mimeType: "text/plain",
+            text: `# Tasks for Phase: ${phase.name}\n\n${tasksContent}`
+          }]
+        };
+      }
+      
+      // Return individual task details
+      if (parts[3] === "task" && parts.length === 5) {
+        const taskId = parts[4];
+        const task = phase.tasks.find(t => t.id === taskId);
+        
+        if (!task) {
+          throw new Error(`Task ${taskId} not found in phase ${phase.name}`);
+        }
+        
+        const taskDetails = `
+Task: ${task.description}
+ID: ${task.id}
+Status: ${task.completed ? 'Completed' : 'Pending'}
+Created: ${task.createdAt.toISOString()}
+Last Updated: ${task.updatedAt.toISOString()}
+`;
+        
+        return {
+          contents: [{
+            uri: request.params.uri,
+            mimeType: "text/plain",
+            text: taskDetails
+          }]
+        };
+      }
     }
   }
   
@@ -847,19 +1129,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Get the feature
       const feature = getFeature(featureId);
       if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
+        throw new Error(`Feature with ID ${featureId} not found`);
       }
       
       // Get the phase
       const phase = feature.phases.find(p => p.id === phaseId);
       if (!phase) {
-        throw new Error(`Phase ${phaseId} not found`);
+        throw new Error(`Phase with ID ${phaseId} not found in feature ${feature.name}`);
       }
       
       // Get the task
       const task = phase.tasks.find(t => t.id === taskId);
       if (!task) {
-        throw new Error(`Task ${taskId} not found`);
+        throw new Error(`Task with ID ${taskId} not found`);
       }
       
       // Update the task status
