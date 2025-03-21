@@ -10,7 +10,9 @@ export type Feature = {
   name: string;
   description: string;
   clarificationResponses: ClarificationResponse[];
+  prd?: string;
   prdDoc?: string;
+  implementationPlan?: string;
   implDoc?: string;
   phases: Phase[];
   createdAt: Date;

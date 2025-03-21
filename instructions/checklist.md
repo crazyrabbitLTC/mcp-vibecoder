@@ -14,11 +14,11 @@
 - [x] Add support for structured questioning workflow
 
 ## Step 3: PRD and Implementation Plan Generation
-- [ ] Create tool for generating PRD document
-- [ ] Implement tool for creating implementation plan
-- [ ] Add helper functions for extracting requirements from clarifications
-- [ ] Implement markdown formatting for documentation generation
-- [ ] Create template structure for PRDs and implementation plans
+- [x] Create tool for generating PRD document
+- [x] Implement tool for creating implementation plan
+- [x] Add helper functions for extracting requirements from clarifications
+- [x] Implement markdown formatting for documentation generation
+- [x] Create template structure for PRDs and implementation plans
 
 ## Step 4: Phase Management Implementation
 - [ ] Implement tool for creating phases

@@ -32,9 +32,17 @@ import {
   DEFAULT_CLARIFICATION_QUESTIONS, 
   getNextClarificationQuestion, 
   addClarificationResponse,
-  formatClarificationResponses
+  formatClarificationResponses,
+  isClarificationComplete,
+  getClarificationStatus
 } from './clarification.js';
-import { generatePRD, generateImplementationPlan } from './documentation.js';
+import {
+  generatePRD,
+  generateImplementationPlan,
+  extractObjectivesFromClarifications,
+  extractRequirementsFromClarifications,
+  extractTechnicalSpecsFromClarifications
+} from './documentation.js';
 
 /**
  * Type alias for a note object.
@@ -259,6 +267,86 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           },
           required: ["featureId"]
+        },
+        handler: async (params: {featureId: string}) => {
+          const { featureId } = params;
+          const feature = getFeature(featureId);
+          
+          if (!feature) {
+            return {
+              error: `Feature with ID ${featureId} not found`
+            };
+          }
+          
+          if (!isClarificationComplete(feature)) {
+            return {
+              error: 'Cannot generate PRD until clarification is complete',
+              clarificationStatus: getClarificationStatus(feature)
+            };
+          }
+          
+          // Generate the PRD
+          const prd = generatePRD(feature);
+          
+          // Update the feature with the PRD
+          updateFeature(featureId, {
+            ...feature,
+            prd,
+            updatedAt: new Date()
+          });
+          
+          return {
+            success: true,
+            message: `PRD generated for feature ${feature.name}`,
+            prd
+          };
+        }
+      },
+      {
+        name: 'generate_implementation_plan',
+        description: 'Generate an implementation plan for a feature based on clarifications and PRD',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            featureId: {
+              type: 'string',
+              description: 'The ID of the feature to generate an implementation plan for'
+            }
+          },
+          required: ['featureId']
+        },
+        handler: async (params: {featureId: string}) => {
+          const { featureId } = params;
+          const feature = getFeature(featureId);
+          
+          if (!feature) {
+            return {
+              error: `Feature with ID ${featureId} not found`
+            };
+          }
+          
+          if (!isClarificationComplete(feature)) {
+            return {
+              error: 'Cannot generate implementation plan until clarification is complete',
+              clarificationStatus: getClarificationStatus(feature)
+            };
+          }
+          
+          // Generate the implementation plan
+          const implementationPlan = generateImplementationPlan(feature);
+          
+          // Update the feature with the implementation plan
+          updateFeature(featureId, {
+            ...feature,
+            implementationPlan,
+            updatedAt: new Date()
+          });
+          
+          return {
+            success: true,
+            message: `Implementation plan generated for feature ${feature.name}`,
+            implementationPlan
+          };
         }
       }
     ]
