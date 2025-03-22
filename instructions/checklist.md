@@ -37,7 +37,7 @@
 - [x] Define all tool schemas and validations
 - [x] Implement error handling for tools
 - [x] Ensure proper argument validation
-- [ ] Add support for tool discoverability
+- [x] Add support for tool discoverability
 - [ ] Test tool invocations with example data
 
 ## Step 7: Prompt Implementation
