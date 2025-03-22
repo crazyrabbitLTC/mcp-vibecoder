@@ -11,6 +11,7 @@ import { formatDate } from './utils.js';
  * Load a template file and return its contents
  * @param templateName The name of the template file (without the path)
  * @returns The template content as a string
+ * @throws Error if the template cannot be loaded
  */
 function loadTemplate(templateName: string): string {
   try {
@@ -18,7 +19,7 @@ function loadTemplate(templateName: string): string {
     return fs.readFileSync(templatePath, 'utf-8');
   } catch (error) {
     console.error(`Error loading template ${templateName}:`, error);
-    return ''; // Return empty string if template can't be loaded
+    throw new Error(`Failed to load template ${templateName}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -28,23 +29,23 @@ function loadTemplate(templateName: string): string {
  * @returns The generated PRD markdown content
  */
 export function generatePRD(feature: Feature): string {
-  const template = loadTemplate('prd-template.md');
-  
-  if (!template) {
-    // Fallback to basic template if file not found
+  try {
+    const template = loadTemplate('prd-template.md');
+    
+    // Replace template variables
+    return template
+      .replace(/{{featureName}}/g, feature.name)
+      .replace(/{{featureDescription}}/g, feature.description || '')
+      .replace(/{{featureNameSlug}}/g, slugify(feature.name))
+      .replace(/{{stepNumber}}/g, '01')
+      .replace(/{{objectives}}/g, extractObjectivesFromClarifications(feature.clarificationResponses))
+      .replace(/{{requirements}}/g, extractRequirementsFromClarifications(feature.clarificationResponses))
+      .replace(/{{technicalSpecs}}/g, extractTechnicalSpecsFromClarifications(feature.clarificationResponses))
+      .replace(/{{implementationPhases}}/g, generateImplementationPhasesList(feature));
+  } catch (error) {
+    console.warn(`Template loading failed, falling back to basic PRD: ${error instanceof Error ? error.message : String(error)}`);
     return generateBasicPRD(feature);
   }
-  
-  // Replace template variables
-  return template
-    .replace(/{{featureName}}/g, feature.name)
-    .replace(/{{featureDescription}}/g, feature.description)
-    .replace(/{{featureNameSlug}}/g, slugify(feature.name))
-    .replace(/{{stepNumber}}/g, '01')
-    .replace(/{{objectives}}/g, extractObjectivesFromClarifications(feature.clarificationResponses))
-    .replace(/{{requirements}}/g, extractRequirementsFromClarifications(feature.clarificationResponses))
-    .replace(/{{technicalSpecs}}/g, extractTechnicalSpecsFromClarifications(feature.clarificationResponses))
-    .replace(/{{implementationPhases}}/g, generateImplementationPhasesList(feature));
 }
 
 /**
@@ -82,77 +83,31 @@ This PRD will be updated as the implementation progresses and feedback is receiv
 }
 
 /**
- * Generate an implementation plan from a feature
+ * Generate an implementation plan from a feature and its clarification responses
  * @param feature The feature to generate an implementation plan for
  * @returns The generated implementation plan markdown content
  */
 export function generateImplementationPlan(feature: Feature): string {
-  const template = loadTemplate('impl-template.md');
-  
-  if (!template) {
-    // Fallback to basic template if file not found
+  try {
+    const template = loadTemplate('implementation-plan-template.md');
+    
+    // Replace template variables
+    return template
+      .replace(/{{featureName}}/g, feature.name)
+      .replace(/{{featureDescription}}/g, feature.description || '')
+      .replace(/{{featureNameSlug}}/g, slugify(feature.name))
+      .replace(/{{stepNumber}}/g, '02')
+      .replace(/{{objectives}}/g, extractObjectivesFromClarifications(feature.clarificationResponses))
+      .replace(/{{requirements}}/g, extractRequirementsFromClarifications(feature.clarificationResponses))
+      .replace(/{{technicalSpecs}}/g, extractTechnicalSpecsFromClarifications(feature.clarificationResponses))
+      .replace(/{{implementationPhases}}/g, generateImplementationPhasesList(feature))
+      .replace(/{{developmentPhases}}/g, generateDefaultPhases(feature).map(p => `## ${p.name}\n\n${p.description}`).join('\n\n'))
+      .replace(/{{fileStructure}}/g, generateFileStructure(feature))
+      .replace(/{{nextSteps}}/g, generateNextSteps(feature).map(step => `- ${step}`).join('\n'));
+  } catch (error) {
+    console.warn(`Template loading failed, falling back to basic implementation plan: ${error instanceof Error ? error.message : String(error)}`);
     return generateBasicImplementationPlan(feature);
   }
-  
-  // Define implementation phases based on clarification responses
-  const phases = generateDefaultPhases(feature);
-  
-  // Get file structure information
-  const fileStructure = generateFileStructure(feature);
-  
-  // Get next steps
-  const nextSteps = generateNextSteps(feature);
-  
-  // Replace template variables for the main template sections
-  let content = template
-    .replace(/{{featureName}}/g, feature.name)
-    .replace(/{{featureDescription}}/g, feature.description)
-    .replace(/{{fileStructure}}/g, fileStructure);
-  
-  // Handle the phases section which requires a loop in the template
-  const phasesRegex = /{{#each phases}}([\s\S]+?){{\/each}}/;
-  const phasesMatch = content.match(phasesRegex);
-  
-  if (phasesMatch) {
-    const phaseTemplate = phasesMatch[1];
-    let phasesContent = '';
-    
-    // Generate content for each phase
-    phases.forEach((phase, index) => {
-      let phaseContent = phaseTemplate
-        .replace(/{{phaseNumber}}/g, String(index + 1))
-        .replace(/{{phaseName}}/g, phase.name)
-        .replace(/{{objectives}}/g, phase.objectives)
-        .replace(/{{codeStyle}}/g, phase.codeStyle)
-        .replace(/{{timeEstimate}}/g, phase.timeEstimate || '1-2 days');
-      
-      // Handle tasks within phases
-      const tasksRegex = /{{#each tasks}}([\s\S]+?){{\/each}}/;
-      const tasksMatch = phaseContent.match(tasksRegex);
-      
-      if (tasksMatch) {
-        const taskTemplate = tasksMatch[1];
-        let tasksContent = '';
-        
-        phase.tasks.forEach((task: string) => {
-          tasksContent += taskTemplate.replace(/{{description}}/g, task);
-        });
-        
-        phaseContent = phaseContent.replace(tasksRegex, tasksContent);
-      }
-      
-      phasesContent += phaseContent;
-    });
-    
-    content = content.replace(phasesRegex, phasesContent);
-  }
-  
-  // Replace next steps variables
-  for (let i = 0; i < nextSteps.length && i < 5; i++) {
-    content = content.replace(new RegExp(`{{nextStep${i+1}}}`, 'g'), nextSteps[i]);
-  }
-  
-  return content;
 }
 
 /**

@@ -20,20 +20,31 @@ export const DEFAULT_CLARIFICATION_QUESTIONS = [
 ];
 
 /**
+ * Result when all clarification questions are complete
+ */
+export interface ClarificationComplete {
+  done: true;
+  message: string;
+}
+
+/**
  * Get the next clarification question for a feature
  * @param feature The feature to get the next question for
- * @returns The next question to ask or null if all questions have been answered
+ * @returns The next question to ask or a completion object if all questions have been answered
+ * @throws Error if the feature is missing the clarificationResponses array
  */
-export function getNextClarificationQuestion(feature: Feature): string | null {
+export function getNextClarificationQuestion(feature: Feature): string | ClarificationComplete {
   if (!feature.clarificationResponses) {
-    // Handle potential undefined clarificationResponses
-    console.error('Feature is missing clarificationResponses array:', feature.id);
-    return DEFAULT_CLARIFICATION_QUESTIONS[0];
+    // Throw a proper error instead of just logging
+    throw new Error(`Feature is missing clarificationResponses array: ${feature.id}`);
   }
   
   // Check if we've asked all the default questions
   if (feature.clarificationResponses.length >= DEFAULT_CLARIFICATION_QUESTIONS.length) {
-    return null;
+    return {
+      done: true,
+      message: "All clarification questions have been answered. You can now generate a PRD for this feature."
+    };
   }
   
   // Get the next question based on the number of responses
@@ -45,15 +56,18 @@ export function getNextClarificationQuestion(feature: Feature): string | null {
  * @param featureId The ID of the feature to add the response to
  * @param question The question that was asked
  * @param answer The user's answer
- * @returns The updated feature or undefined if not found
+ * @returns The updated feature
+ * @throws Error if the feature is not found
  */
 export function addClarificationResponse(
   featureId: string,
   question: string,
   answer: string
-): Feature | undefined {
+): Feature {
   const feature = getFeature(featureId);
-  if (!feature) return undefined;
+  if (!feature) {
+    throw new Error(`Feature with ID ${featureId} not found`);
+  }
   
   // Create a new response
   const newResponse: ClarificationResponse = {
@@ -63,9 +77,15 @@ export function addClarificationResponse(
   };
   
   // Update the feature with the new response
-  return updateFeature(featureId, {
+  const updatedFeature = updateFeature(featureId, {
     clarificationResponses: [...feature.clarificationResponses, newResponse]
   });
+  
+  if (!updatedFeature) {
+    throw new Error(`Failed to update feature ${featureId} with new clarification response`);
+  }
+  
+  return updatedFeature;
 }
 
 /**
@@ -74,7 +94,7 @@ export function addClarificationResponse(
  * @returns Formatted text
  */
 export function formatClarificationResponses(responses: ClarificationResponse[]): string {
-  if (responses.length === 0) {
+  if (!responses || responses.length === 0) {
     return "No clarification responses yet.";
   }
   
@@ -85,8 +105,13 @@ export function formatClarificationResponses(responses: ClarificationResponse[])
  * Check if a feature has completed the clarification process
  * @param feature The feature to check
  * @returns True if clarification is complete, false otherwise
+ * @throws Error if the feature is missing the clarificationResponses array
  */
 export function isClarificationComplete(feature: Feature): boolean {
+  if (!feature.clarificationResponses) {
+    throw new Error(`Feature is missing clarificationResponses array: ${feature.id}`);
+  }
+  
   return feature.clarificationResponses.length >= DEFAULT_CLARIFICATION_QUESTIONS.length;
 }
 
@@ -94,8 +119,13 @@ export function isClarificationComplete(feature: Feature): boolean {
  * Get a summary of the clarification status
  * @param feature The feature to get the status for
  * @returns A text summary of the clarification status
+ * @throws Error if the feature is missing the clarificationResponses array
  */
 export function getClarificationStatus(feature: Feature): string {
+  if (!feature.clarificationResponses) {
+    throw new Error(`Feature is missing clarificationResponses array: ${feature.id}`);
+  }
+  
   const total = DEFAULT_CLARIFICATION_QUESTIONS.length;
   const completed = feature.clarificationResponses.length;
   

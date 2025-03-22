@@ -3,6 +3,7 @@
 import { spawn } from 'child_process';
 import { createInterface } from 'readline';
 
+console.log('Starting Vibe-Coder MCP server...');
 // Start the MCP server
 const serverProcess = spawn('node', ['./build/index.js']);
 
@@ -20,35 +21,70 @@ serverProcess.stderr.on('data', (data) => {
 
 // Wait for server to start
 setTimeout(() => {
-  console.log('Sending start_feature_clarification request...');
+  console.log('Sending initialize request...');
   
-  // MCP message to start a feature
-  const startFeatureMsg = {
-    id: "msg1",
+  // First, send the initialize request
+  const initializeMsg = {
     jsonrpc: "2.0",
-    method: "callTool",
+    id: "init1",
+    method: "initialize",
     params: {
-      name: "start_feature_clarification",
-      arguments: {
-        featureName: "Test Feature",
-        initialDescription: "This is a test feature"
+      client: {
+        name: "Test Client",
+        version: "1.0.0"
+      },
+      capabilities: {
+        resources: {},
+        tools: {},
+        prompts: {}
       }
     }
   };
   
-  // Send the message to the server
-  serverProcess.stdin.write(JSON.stringify(startFeatureMsg) + '\n');
+  serverProcess.stdin.write(JSON.stringify(initializeMsg) + '\n');
   
   // Wait for response and send clarification
   let featureId = null;
+  let questionIndex = 0;
   
   rl.on('line', (line) => {
     try {
+      console.log('Raw server output:', line);
       const response = JSON.parse(line);
-      console.log('Received response:', JSON.stringify(response, null, 2));
+      console.log('Parsed response:', JSON.stringify(response, null, 2));
+      
+      // After initialization, list available tools
+      if (response.id === "init1") {
+        console.log('Initialization successful, listing tools...');
+        const listToolsMsg = {
+          jsonrpc: "2.0",
+          id: "list1",
+          method: "listTools",
+          params: {}
+        };
+        serverProcess.stdin.write(JSON.stringify(listToolsMsg) + '\n');
+      }
+      
+      // After listing tools, call the start_feature_clarification tool
+      if (response.id === "list1") {
+        console.log('Tools listed, starting feature clarification...');
+        const callToolMsg = {
+          jsonrpc: "2.0",
+          id: "call1",
+          method: "callTool",
+          params: {
+            name: "start_feature_clarification",
+            arguments: {
+              featureName: "Test Automated Feature",
+              initialDescription: "This is a test automated feature for testing the clarification flow"
+            }
+          }
+        };
+        serverProcess.stdin.write(JSON.stringify(callToolMsg) + '\n');
+      }
       
       // Check if this is a response to start_feature_clarification
-      if (response.id === "msg1" && response.result?.content) {
+      if (response.id === "call1" && response.result?.content) {
         // Extract feature ID from response text
         const text = response.result.content[0].text;
         const match = text.match(/Feature ID: ([a-z0-9]+)/);
@@ -58,65 +94,51 @@ setTimeout(() => {
           console.log(`Extracted feature ID: ${featureId}`);
           
           // Send first clarification
-          const clarifyMsg = {
-            id: "msg2",
-            jsonrpc: "2.0",
-            method: "callTool",
-            params: {
-              name: "provide_clarification",
-              arguments: {
-                featureId: featureId,
-                question: "What specific problem does this feature solve?", 
-                answer: "This is a test answer for the first question."
-              }
-            }
-          };
-          
-          setTimeout(() => {
-            console.log('Sending first clarification...');
-            serverProcess.stdin.write(JSON.stringify(clarifyMsg) + '\n');
-          }, 500);
+          sendClarification(featureId, questionIndex, "This is an answer to question 0");
         }
       }
       
-      // Check if this is a response to provide_clarification
-      if (response.id === "msg2" && response.result?.content) {
+      // Check if this is a response to any of the clarification messages
+      if (response.id && response.id.startsWith("clarify") && response.result?.content) {
         const text = response.result.content[0].text;
         console.log('Clarification response text:', text);
         
-        // Send second clarification with next question
-        if (featureId) {
-          const clarifyMsg2 = {
-            id: "msg3",
-            jsonrpc: "2.0",
-            method: "callTool",
-            params: {
-              name: "provide_clarification",
-              arguments: {
-                featureId: featureId,
-                question: "Who are the target users for this feature?",
-                answer: "This is a test answer for the second question."
-              }
-            }
-          };
-          
-          setTimeout(() => {
-            console.log('Sending second clarification...');
-            serverProcess.stdin.write(JSON.stringify(clarifyMsg2) + '\n');
-          }, 500);
+        // Check if we need to send the next question
+        if (text.startsWith("Response recorded.")) {
+          questionIndex++;
+          if (questionIndex < 7) { // We have 7 default questions
+            setTimeout(() => {
+              sendClarification(featureId, questionIndex, `This is an answer to question ${questionIndex}`);
+            }, 500);
+          } else {
+            console.log('All questions answered, test complete');
+            serverProcess.kill();
+            process.exit(0);
+          }
         }
-      }
-      
-      // After receiving the second clarification response, exit
-      if (response.id === "msg3") {
-        console.log('Test complete, shutting down...');
-        serverProcess.kill();
-        process.exit(0);
       }
     } catch (e) {
       console.error('Error parsing JSON response:', e);
     }
   });
+  
+  function sendClarification(featureId, index, answer) {
+    const clarifyMsg = {
+      jsonrpc: "2.0",
+      id: `clarify${index}`,
+      method: "callTool",
+      params: {
+        name: "provide_clarification",
+        arguments: {
+          featureId: featureId,
+          question: `Question #${index}`,
+          answer: answer
+        }
+      }
+    };
+    console.log(`Sending clarification ${index}...`);
+    serverProcess.stdin.write(JSON.stringify(clarifyMsg) + '\n');
+  }
 }, 1000);
 
 // Handle process exit

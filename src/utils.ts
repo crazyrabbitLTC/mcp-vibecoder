@@ -1,11 +1,43 @@
 /**
+ * @file utils.ts
+ * @version 1.1.0
+ * 
  * Utility functions for the Vibe-Coder MCP Server
  */
 
 import { Feature, Phase, Task, PhaseStatus } from './types.js';
+import { FeatureId, PhaseId, TaskId, createFeatureId, createPhaseId, createTaskId } from './schemas.js';
 
 /**
- * Generate a unique ID for features, phases, tasks, etc.
+ * Generate a unique ID for features with proper prefix
+ * @returns A feature ID string
+ */
+export function generateFeatureId(): FeatureId {
+  const randomPart = Math.random().toString(36).substring(2, 10);
+  return createFeatureId(`feature-${randomPart}`);
+}
+
+/**
+ * Generate a unique ID for phases with proper prefix
+ * @returns A phase ID string
+ */
+export function generatePhaseId(): PhaseId {
+  const randomPart = Math.random().toString(36).substring(2, 10);
+  return createPhaseId(`phase-${randomPart}`);
+}
+
+/**
+ * Generate a unique ID for tasks with proper prefix
+ * @returns A task ID string
+ */
+export function generateTaskId(): TaskId {
+  const randomPart = Math.random().toString(36).substring(2, 10);
+  return createTaskId(`task-${randomPart}`);
+}
+
+/**
+ * Legacy ID generator for backward compatibility
+ * @deprecated Use the typed ID generators instead
  * @returns A random string ID
  */
 export function generateId(): string {
@@ -40,7 +72,7 @@ export function createFeatureObject(name: string, description: string = ""): Fea
   const timestamp = now();
   
   return {
-    id: generateId(),
+    id: generateFeatureId(),
     name,
     description,
     clarificationResponses: [],
@@ -56,15 +88,15 @@ export function createFeatureObject(name: string, description: string = ""): Fea
  * @param description The phase description
  * @returns A new phase object
  */
-export function createPhaseObject(name: string, description: string): any {
+export function createPhaseObject(name: string, description: string): Phase {
   const timestamp = now();
   
   return {
-    id: generateId(),
+    id: generatePhaseId(),
     name,
     description,
     tasks: [],
-    status: "pending" as const,
+    status: "pending" as PhaseStatus,
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -75,11 +107,11 @@ export function createPhaseObject(name: string, description: string): any {
  * @param description The task description
  * @returns A new task object
  */
-export function createTaskObject(description: string): any {
+export function createTaskObject(description: string): Task {
   const timestamp = now();
   
   return {
-    id: generateId(),
+    id: generateTaskId(),
     description,
     completed: false,
     createdAt: timestamp,
@@ -103,12 +135,12 @@ export function isValidPhaseStatus(status: string): boolean {
  */
 export function generateFeatureProgressSummary(feature: Feature): string {
   const totalPhases = feature.phases.length;
-  const completedPhases = feature.phases.filter((p: Phase) => p.status === 'completed' || p.status === 'reviewed').length;
-  const inProgressPhases = feature.phases.filter((p: Phase) => p.status === 'in_progress').length;
+  const completedPhases = feature.phases.filter(p => p.status === 'completed' || p.status === 'reviewed').length;
+  const inProgressPhases = feature.phases.filter(p => p.status === 'in_progress').length;
   
-  const totalTasks = feature.phases.reduce((acc: number, phase: Phase) => acc + phase.tasks.length, 0);
+  const totalTasks = feature.phases.reduce((acc, phase) => acc + phase.tasks.length, 0);
   const completedTasks = feature.phases.reduce(
-    (acc: number, phase: Phase) => acc + phase.tasks.filter((t: Task) => t.completed).length, 0
+    (acc, phase) => acc + phase.tasks.filter(t => t.completed).length, 0
   );
   
   const phaseProgress = totalPhases > 0 
@@ -139,9 +171,9 @@ export function generateFeatureProgressSummary(feature: Feature): string {
   if (totalPhases === 0) {
     summary += "\nNo phases defined for this feature yet.";
   } else {
-    feature.phases.forEach((phase: Phase) => {
+    feature.phases.forEach(phase => {
       const phaseTasks = phase.tasks.length;
-      const phaseCompletedTasks = phase.tasks.filter((t: Task) => t.completed).length;
+      const phaseCompletedTasks = phase.tasks.filter(t => t.completed).length;
       const phaseTaskProgress = phaseTasks > 0 
         ? Math.round((phaseCompletedTasks / phaseTasks) * 100) 
         : 0;
@@ -153,7 +185,7 @@ export function generateFeatureProgressSummary(feature: Feature): string {
 - Description: ${phase.description}
 
 Tasks:
-${phase.tasks.map((task: Task) => `- [${task.completed ? 'x' : ' '}] ${task.description}`).join('\n')}
+${phase.tasks.map(task => `- [${task.completed ? 'x' : ' '}] ${task.description}`).join('\n')}
 `;
     });
   }

@@ -1103,8 +1103,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const question = String(request.params.arguments?.question || "");
         const answer = String(request.params.arguments?.answer || "");
         
+        console.log(`\n[CLARIFICATION] Received request for feature ${featureId}\n  Question: "${question.substring(0, 50)}..."\n  Answer: "${answer.substring(0, 50)}..."`);
+        
         // Basic validation
         if (!featureId || !answer) {
+          console.log(`[CLARIFICATION] Missing required fields: featureId=${!!featureId}, answer=${!!answer}`);
           return {
             content: [{
               type: "text",
@@ -1116,6 +1119,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Get the feature
         const feature = getFeature(featureId);
         if (!feature) {
+          console.log(`[CLARIFICATION] Feature ID ${featureId} not found`);
           return {
             content: [{
               type: "text",
@@ -1124,6 +1128,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
         
+        console.log(`[CLARIFICATION] Found feature: ${feature.name} with ${feature.clarificationResponses.length} existing responses`);
+        
         // Add the clarification response to the feature
         feature.clarificationResponses.push({
           question,
@@ -1131,15 +1137,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           timestamp: new Date()
         });
         
+        console.log(`[CLARIFICATION] Added response, now has ${feature.clarificationResponses.length} responses`);
+        
         // Save the feature with the updated clarification response
         updateFeature(featureId, feature);
         
         // Determine which question to ask next
         const nextQuestionIndex = feature.clarificationResponses.length;
         
+        console.log(`[CLARIFICATION] Next question index would be: ${nextQuestionIndex}`);
+        console.log(`[CLARIFICATION] Total questions available: ${CLARIFICATION_QUESTIONS.length}`);
+        
         if (nextQuestionIndex < CLARIFICATION_QUESTIONS.length) {
           // We have more questions to ask
           const nextQuestion = CLARIFICATION_QUESTIONS[nextQuestionIndex];
+          console.log(`[CLARIFICATION] Returning next question: "${nextQuestion.substring(0, 50)}..."`);
           return {
             content: [{
               type: "text",
@@ -1148,6 +1160,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         } else {
           // All questions answered
+          console.log(`[CLARIFICATION] All questions answered`);
           return {
             content: [{
               type: "text",
