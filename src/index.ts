@@ -25,7 +25,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 // Import core modules
-import { Feature, FeatureStorage, PhaseStatus, Phase, Task } from './types.js';
+import { Feature, FeatureStorage, PhaseStatus, Phase, Task, ClarificationResponse } from './types.js';
 import { features, storeFeature, getFeature, updateFeature, listFeatures } from './storage.js';
 import { 
   DEFAULT_CLARIFICATION_QUESTIONS as CLARIFICATION_QUESTIONS, 
@@ -1100,18 +1100,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       case "provide_clarification": {
         const featureId = String(request.params.arguments?.featureId || "");
+        const question = String(request.params.arguments?.question || "");
         const answer = String(request.params.arguments?.answer || "");
-        let questionIndex = 0;
         
-        try {
-          // Try to parse the question index from the question parameter if provided
-          const questionParam = String(request.params.arguments?.question || "");
-          if (questionParam.startsWith("Question #")) {
-            const indexStr = questionParam.replace("Question #", "").split(":")[0];
-            questionIndex = parseInt(indexStr, 10) - 1;
-          }
-        } catch (e) {
-          console.error("Error parsing question index:", e);
+        // Basic validation
+        if (!featureId || !answer) {
+          return {
+            content: [{
+              type: "text",
+              text: "Error: Feature ID and answer are required"
+            }]
+          };
         }
         
         // Get the feature
@@ -1125,69 +1124,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
         
-        // If no index was provided, use the number of existing responses
-        if (isNaN(questionIndex)) {
-          questionIndex = feature.clarificationResponses.length;
-        }
-        
-        // Make sure the index is valid
-        if (questionIndex < 0 || questionIndex >= CLARIFICATION_QUESTIONS.length) {
-          return {
-            content: [{
-              type: "text",
-              text: `Error: Invalid question index ${questionIndex}. There are ${CLARIFICATION_QUESTIONS.length} questions available.`
-            }]
-          };
-        }
-        
-        // Get the question text for this index
-        const questionText = CLARIFICATION_QUESTIONS[questionIndex];
-        
-        // Validate the answer
-        if (!answer || answer.trim() === "") {
-          return {
-            content: [{
-              type: "text",
-              text: "Error: Answer cannot be empty"
-            }]
-          };
-        }
-        
-        // Store the answer for this question
-        const newResponse = {
-          question: questionText,
-          answer: answer,
+        // Add the clarification response to the feature
+        feature.clarificationResponses.push({
+          question,
+          answer,
           timestamp: new Date()
-        };
-        
-        // Create or update the clarificationResponses array
-        let updatedResponses = [...(feature.clarificationResponses || [])];
-        
-        // Replace the response at the specified index, or add it if it doesn't exist
-        if (questionIndex < updatedResponses.length) {
-          updatedResponses[questionIndex] = newResponse;
-        } else {
-          updatedResponses.push(newResponse);
-        }
-        
-        // Update the feature with the new responses
-        updateFeature(featureId, {
-          clarificationResponses: updatedResponses,
         });
         
-        // Determine the next question index
-        const nextIndex = questionIndex + 1;
+        // Save the feature with the updated clarification response
+        updateFeature(featureId, feature);
         
-        // Check if we have more questions
-        if (nextIndex < CLARIFICATION_QUESTIONS.length) {
-          const nextQuestion = CLARIFICATION_QUESTIONS[nextIndex];
+        // Determine which question to ask next
+        const nextQuestionIndex = feature.clarificationResponses.length;
+        
+        if (nextQuestionIndex < CLARIFICATION_QUESTIONS.length) {
+          // We have more questions to ask
+          const nextQuestion = CLARIFICATION_QUESTIONS[nextQuestionIndex];
           return {
             content: [{
               type: "text",
-              text: `Response recorded. Question #${nextIndex + 1}: ${nextQuestion}`
+              text: `Response recorded. ${nextQuestion}`
             }]
           };
         } else {
+          // All questions answered
           return {
             content: [{
               type: "text",
