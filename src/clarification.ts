@@ -25,6 +25,12 @@ export const DEFAULT_CLARIFICATION_QUESTIONS = [
  * @returns The next question to ask or null if all questions have been answered
  */
 export function getNextClarificationQuestion(feature: Feature): string | null {
+  if (!feature.clarificationResponses) {
+    // Handle potential undefined clarificationResponses
+    console.error('Feature is missing clarificationResponses array:', feature.id);
+    return DEFAULT_CLARIFICATION_QUESTIONS[0];
+  }
+  
   // Check if we've asked all the default questions
   if (feature.clarificationResponses.length >= DEFAULT_CLARIFICATION_QUESTIONS.length) {
     return null;

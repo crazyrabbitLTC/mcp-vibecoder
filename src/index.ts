@@ -1100,57 +1100,91 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       case "provide_clarification": {
         const featureId = String(request.params.arguments?.featureId || "");
-        const question = String(request.params.arguments?.question || "");
         const answer = String(request.params.arguments?.answer || "");
+        let questionIndex = 0;
         
-        // Validate inputs
-        const featureResult = validateFeatureId(featureId);
-        if (!featureResult.valid) {
+        try {
+          // Try to parse the question index from the question parameter if provided
+          const questionParam = String(request.params.arguments?.question || "");
+          if (questionParam.startsWith("Question #")) {
+            const indexStr = questionParam.replace("Question #", "").split(":")[0];
+            questionIndex = parseInt(indexStr, 10) - 1;
+          }
+        } catch (e) {
+          console.error("Error parsing question index:", e);
+        }
+        
+        // Get the feature
+        const feature = getFeature(featureId);
+        if (!feature) {
           return {
             content: [{
-              type: "text", 
-              text: `Error: ${featureResult.message}`
+              type: "text",
+              text: `Error: Feature with ID ${featureId} not found`
             }]
           };
         }
         
-        const questionValidation = validateRequiredText(question, "Question", 5, 1000);
-        if (!questionValidation.valid) {
+        // If no index was provided, use the number of existing responses
+        if (isNaN(questionIndex)) {
+          questionIndex = feature.clarificationResponses.length;
+        }
+        
+        // Make sure the index is valid
+        if (questionIndex < 0 || questionIndex >= CLARIFICATION_QUESTIONS.length) {
           return {
             content: [{
               type: "text",
-              text: `Error: ${questionValidation.message}`
+              text: `Error: Invalid question index ${questionIndex}. There are ${CLARIFICATION_QUESTIONS.length} questions available.`
             }]
           };
         }
         
-        const answerValidation = validateRequiredText(answer, "Answer", 1, 5000);
-        if (!answerValidation.valid) {
+        // Get the question text for this index
+        const questionText = CLARIFICATION_QUESTIONS[questionIndex];
+        
+        // Validate the answer
+        if (!answer || answer.trim() === "") {
           return {
             content: [{
               type: "text",
-              text: `Error: ${answerValidation.message}`
+              text: "Error: Answer cannot be empty"
             }]
           };
         }
         
-        const feature = featureResult.data;
+        // Store the answer for this question
+        const newResponse = {
+          question: questionText,
+          answer: answer,
+          timestamp: new Date()
+        };
         
-        // Store the clarification response
-        if (!feature.clarifications) {
-          feature.clarifications = {};
+        // Create or update the clarificationResponses array
+        let updatedResponses = [...(feature.clarificationResponses || [])];
+        
+        // Replace the response at the specified index, or add it if it doesn't exist
+        if (questionIndex < updatedResponses.length) {
+          updatedResponses[questionIndex] = newResponse;
+        } else {
+          updatedResponses.push(newResponse);
         }
         
-        feature.clarifications[question] = answer;
+        // Update the feature with the new responses
+        updateFeature(featureId, {
+          clarificationResponses: updatedResponses,
+        });
         
-        // Get the next question or indicate completion
-        const nextQuestion = getNextClarificationQuestion(feature);
+        // Determine the next question index
+        const nextIndex = questionIndex + 1;
         
-        if (nextQuestion) {
+        // Check if we have more questions
+        if (nextIndex < CLARIFICATION_QUESTIONS.length) {
+          const nextQuestion = CLARIFICATION_QUESTIONS[nextIndex];
           return {
             content: [{
               type: "text",
-              text: `Response recorded. ${nextQuestion}`
+              text: `Response recorded. Question #${nextIndex + 1}: ${nextQuestion}`
             }]
           };
         } else {
@@ -1180,7 +1214,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const feature = featureResult.data;
         
         // Check if clarifications are complete
-        if (!feature.clarifications || Object.keys(feature.clarifications).length < CLARIFICATION_QUESTIONS.length) {
+        if (!isClarificationComplete(feature)) {
           return {
             content: [{
               type: "text",

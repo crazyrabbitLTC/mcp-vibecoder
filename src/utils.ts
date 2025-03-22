@@ -36,7 +36,7 @@ export function now(): Date {
  * @param description The feature description
  * @returns A new feature object
  */
-export function createFeatureObject(name: string, description: string = ""): any {
+export function createFeatureObject(name: string, description: string = ""): Feature {
   const timestamp = now();
   
   return {
