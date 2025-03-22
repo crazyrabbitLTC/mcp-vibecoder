@@ -134,7 +134,7 @@ export function generateImplementationPlan(feature: Feature): string {
         const taskTemplate = tasksMatch[1];
         let tasksContent = '';
         
-        phase.tasks.forEach(task => {
+        phase.tasks.forEach((task: string) => {
           tasksContent += taskTemplate.replace(/{{description}}/g, task);
         });
         
@@ -168,7 +168,7 @@ function generateBasicImplementationPlan(feature: Feature): string {
     phasesContent += `\n### Phase ${index + 1}: ${phase.name}\n\n`;
     phasesContent += `**Objectives**: ${phase.objectives}\n\n`;
     phasesContent += `**Tasks**:\n`;
-    phase.tasks.forEach(task => {
+    phase.tasks.forEach((task: string) => {
       phasesContent += `- [ ] ${task}\n`;
     });
     phasesContent += `\n**Code Style & Practices**: ${phase.codeStyle}\n\n`;
