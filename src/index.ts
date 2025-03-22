@@ -186,79 +186,98 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
  * - Phase and task details
  */
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-  const url = new URL(request.params.uri);
-  
-  // Handle list of all features
-  if (url.protocol === "features:") {
-    if (url.pathname === "/list") {
-      return {
-        contents: [{
-          uri: request.params.uri,
-          mimeType: "text/plain",
-          text: listFeatures().map(f => `${f.id}: ${f.name}`).join("\n")
-        }]
-      };
-    }
+  try {
+    const url = new URL(request.params.uri);
     
-    if (url.pathname === "/status") {
-      const features = listFeatures();
-      
-      if (features.length === 0) {
+    // Handle list of all features
+    if (url.protocol === "features:") {
+      if (url.pathname === "/list") {
         return {
           contents: [{
             uri: request.params.uri,
-            mimeType: "text/markdown",
-            text: "# Project Status\n\nNo features have been created yet."
+            mimeType: "text/plain",
+            text: listFeatures().map(f => `${f.id}: ${f.name}`).join("\n")
           }]
         };
       }
       
-      const featuresStatus = features.map(feature => {
-        const totalPhases = feature.phases.length;
-        const completedPhases = feature.phases.filter(p => p.status === 'completed' || p.status === 'reviewed').length;
-        const totalTasks = feature.phases.reduce((acc, phase) => acc + phase.tasks.length, 0);
-        const completedTasks = feature.phases.reduce(
-          (acc, phase) => acc + phase.tasks.filter(t => t.completed).length, 0
-        );
+      if (url.pathname === "/status") {
+        const features = listFeatures();
         
-        return `## ${feature.name}
+        if (features.length === 0) {
+          return {
+            contents: [{
+              uri: request.params.uri,
+              mimeType: "text/markdown",
+              text: "# Project Status\n\nNo features have been created yet."
+            }]
+          };
+        }
+        
+        const featuresStatus = features.map(feature => {
+          const totalPhases = feature.phases.length;
+          const completedPhases = feature.phases.filter(p => p.status === 'completed' || p.status === 'reviewed').length;
+          const totalTasks = feature.phases.reduce((acc, phase) => acc + phase.tasks.length, 0);
+          const completedTasks = feature.phases.reduce(
+            (acc, phase) => acc + phase.tasks.filter(t => t.completed).length, 0
+          );
+          
+          return `## ${feature.name}
 - ID: ${feature.id}
 - Status: ${completedPhases === totalPhases && totalPhases > 0 ? 'Completed' : 'In Progress'}
 - Phases: ${completedPhases}/${totalPhases} completed
 - Tasks: ${completedTasks}/${totalTasks} completed
 - [View Details](feature://${feature.id}/progress)
 `;
-      }).join('\n');
-      
-      return {
-        contents: [{
-          uri: request.params.uri,
-          mimeType: "text/markdown",
-          text: `# Project Status\n\n${featuresStatus}`
-        }]
-      };
-    }
-  }
-  
-  // Handle feature-specific resources
-  if (url.protocol === "feature:") {
-    const parts = url.pathname.split('/').filter(Boolean);
-    const featureId = parts[0];
-    const feature = getFeature(featureId);
-    
-    if (!feature) {
-      throw new Error(`Feature ${featureId} not found`);
+        }).join('\n');
+        
+        return {
+          contents: [{
+            uri: request.params.uri,
+            mimeType: "text/markdown",
+            text: `# Project Status\n\n${featuresStatus}`
+          }]
+        };
+      }
     }
     
-    // Return feature details
-    if (parts.length === 1) {
-      const timestamp = feature.updatedAt.toISOString();
-      const clarifications = formatClarificationResponses(feature.clarificationResponses);
-      const phasesText = feature.phases.map(p => 
-        `- ${p.name} (${p.status}): ${p.tasks.filter(t => t.completed).length}/${p.tasks.length} tasks completed`
-      ).join('\n');
+    // Handle feature-specific resources
+    if (url.protocol === "feature:") {
+      // The hostname part is actually our feature ID in feature:// URLs
+      let featureId = "";
       
-      const featureDetails = `
+      if (url.hostname) {
+        featureId = url.hostname;
+      } else {
+        // Try to get feature ID from pathname for backward compatibility
+        const parts = url.pathname.split('/').filter(Boolean);
+        if (parts.length > 0) {
+          featureId = parts[0];
+        }
+      }
+      
+      if (!featureId) {
+        throw new Error(`Invalid feature URI: ${request.params.uri}. Missing feature ID.`);
+      }
+      
+      const feature = getFeature(featureId);
+      
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Extract path parts, excluding empty strings
+      const parts = url.pathname.split('/').filter(Boolean);
+      
+      // Return feature details - no additional path parts beyond the feature ID
+      if (parts.length === 0) {
+        const timestamp = feature.updatedAt.toISOString();
+        const clarifications = formatClarificationResponses(feature.clarificationResponses);
+        const phasesText = feature.phases.map(p => 
+          `- ${p.name} (${p.status}): ${p.tasks.filter(t => t.completed).length}/${p.tasks.length} tasks completed`
+        ).join('\n');
+        
+        const featureDetails = `
 Feature: ${feature.name}
 ID: ${feature.id}
 Description: ${feature.description}
@@ -270,120 +289,124 @@ ${clarifications}
 Phases (${feature.phases.length}):
 ${phasesText}
 `;
-      
-      return {
-        contents: [{
-          uri: request.params.uri,
-          mimeType: "text/plain",
-          text: featureDetails
-        }]
-      };
-    }
-    
-    // Return feature progress report
-    if (parts[1] === "progress") {
-      const progressReport = generateFeatureProgressSummary(feature);
-      
-      return {
-        contents: [{
-          uri: request.params.uri,
-          mimeType: "text/markdown",
-          text: progressReport
-        }]
-      };
-    }
-    
-    // Return PRD document
-    if (parts[1] === "prd") {
-      const prdContent = feature.prdDoc || generatePRD(feature);
-      
-      return {
-        contents: [{
-          uri: request.params.uri,
-          mimeType: "text/markdown",
-          text: prdContent
-        }]
-      };
-    }
-    
-    // Return implementation plan document
-    if (parts[1] === "implementation") {
-      const implContent = feature.implDoc || generateImplementationPlan(feature);
-      
-      return {
-        contents: [{
-          uri: request.params.uri,
-          mimeType: "text/markdown",
-          text: implContent
-        }]
-      };
-    }
-    
-    // Return phase listing
-    if (parts[1] === "phases") {
-      if (feature.phases.length === 0) {
+        
         return {
           contents: [{
             uri: request.params.uri,
             mimeType: "text/plain",
-            text: `No phases defined for feature: ${feature.name}`
+            text: featureDetails
           }]
         };
       }
       
-      const phasesContent = feature.phases.map(phase => {
-        const completedTasks = phase.tasks.filter(t => t.completed).length;
-        const totalTasks = phase.tasks.length;
-        return `Phase: ${phase.name} (ID: ${phase.id})
+      // Resource is a sub-resource of the feature
+      if (parts.length >= 1) {
+        const subResource = parts[0];
+        
+        // Return feature progress report
+        if (subResource === "progress") {
+          const progressReport = generateFeatureProgressSummary(feature);
+          
+          return {
+            contents: [{
+              uri: request.params.uri,
+              mimeType: "text/markdown",
+              text: progressReport
+            }]
+          };
+        }
+        
+        // Return PRD document
+        if (subResource === "prd") {
+          const prdContent = feature.prdDoc || generatePRD(feature);
+          
+          return {
+            contents: [{
+              uri: request.params.uri,
+              mimeType: "text/markdown",
+              text: prdContent
+            }]
+          };
+        }
+        
+        // Return implementation plan document
+        if (subResource === "implementation") {
+          const implContent = feature.implDoc || generateImplementationPlan(feature);
+          
+          return {
+            contents: [{
+              uri: request.params.uri,
+              mimeType: "text/markdown",
+              text: implContent
+            }]
+          };
+        }
+        
+        // Return phase listing
+        if (subResource === "phases") {
+          if (feature.phases.length === 0) {
+            return {
+              contents: [{
+                uri: request.params.uri,
+                mimeType: "text/plain",
+                text: `No phases defined for feature: ${feature.name}`
+              }]
+            };
+          }
+          
+          const phasesContent = feature.phases.map(phase => {
+            const completedTasks = phase.tasks.filter(t => t.completed).length;
+            const totalTasks = phase.tasks.length;
+            return `Phase: ${phase.name} (ID: ${phase.id})
 Status: ${phase.status}
 Description: ${phase.description}
 Progress: ${completedTasks}/${totalTasks} tasks completed
 Last Updated: ${phase.updatedAt.toISOString()}
 `;
-      }).join('\n---\n\n');
-      
-      return {
-        contents: [{
-          uri: request.params.uri,
-          mimeType: "text/plain",
-          text: `# Phases for Feature: ${feature.name}\n\n${phasesContent}`
-        }]
-      };
-    }
-    
-    // Handle list of all tasks for a feature
-    if (parts[1] === "tasks") {
-      const allTasks = feature.phases.flatMap(phase => 
-        phase.tasks.map(task => ({
-          ...task,
-          phaseName: phase.name,
-          phaseId: phase.id,
-          phaseStatus: phase.status
-        }))
-      );
-      
-      if (allTasks.length === 0) {
-        return {
-          contents: [{
-            uri: request.params.uri,
-            mimeType: "text/plain",
-            text: `No tasks defined for feature: ${feature.name}`
-          }]
-        };
-      }
-      
-      const pendingTasks = allTasks.filter(t => !t.completed);
-      const completedTasks = allTasks.filter(t => t.completed);
-      
-      const pendingTasksText = pendingTasks.length > 0 
-        ? pendingTasks.map(task => `- [ ] ${task.description} (ID: ${task.id}, Phase: ${task.phaseName})`).join('\n')
-        : "No pending tasks.";
+          }).join('\n---\n\n');
+          
+          return {
+            contents: [{
+              uri: request.params.uri,
+              mimeType: "text/plain",
+              text: `# Phases for Feature: ${feature.name}\n\n${phasesContent}`
+            }]
+          };
+        }
         
-      const completedTasksText = completedTasks.length > 0
-        ? completedTasks.map(task => `- [x] ${task.description} (ID: ${task.id}, Phase: ${task.phaseName})`).join('\n')
-        : "No completed tasks.";
-      
-      const tasksContent = `# All Tasks for Feature: ${feature.name}
+        // Handle list of all tasks for a feature
+        if (subResource === "tasks") {
+          const allTasks = feature.phases.flatMap(phase => 
+            phase.tasks.map(task => ({
+              ...task,
+              phaseName: phase.name,
+              phaseId: phase.id,
+              phaseStatus: phase.status
+            }))
+          );
+          
+          if (allTasks.length === 0) {
+            return {
+              contents: [{
+                uri: request.params.uri,
+                mimeType: "text/plain",
+                text: `No tasks defined for feature: ${feature.name}`
+              }]
+            };
+          }
+          
+          const pendingTasks = allTasks.filter(t => !t.completed);
+          const completedTasks = allTasks.filter(t => t.completed);
+          
+          const pendingTasksText = pendingTasks.length > 0 
+            ? pendingTasks.map(task => `- [ ] ${task.description} (ID: ${task.id}, Phase: ${task.phaseName})`).join('\n')
+            : "No pending tasks.";
+            
+          const completedTasksText = completedTasks.length > 0
+            ? completedTasks.map(task => `- [x] ${task.description} (ID: ${task.id}, Phase: ${task.phaseName})`).join('\n')
+            : "No completed tasks.";
+          
+          const tasksContent = `# All Tasks for Feature: ${feature.name}
 
 ## Pending Tasks (${pendingTasks.length})
 ${pendingTasksText}
@@ -391,35 +414,35 @@ ${pendingTasksText}
 ## Completed Tasks (${completedTasks.length})
 ${completedTasksText}
 `;
-      
-      return {
-        contents: [{
-          uri: request.params.uri,
-          mimeType: "text/plain",
-          text: tasksContent
-        }]
-      };
-    }
-    
-    // Handle phase-specific resources
-    if (parts[1] === "phase" && parts.length >= 3) {
-      const phaseId = parts[2];
-      const phase = feature.phases.find(p => p.id === phaseId);
-      
-      if (!phase) {
-        throw new Error(`Phase ${phaseId} not found in feature ${feature.name}`);
-      }
-      
-      // Return phase details
-      if (parts.length === 3) {
-        const completedTasks = phase.tasks.filter(t => t.completed).length;
-        const totalTasks = phase.tasks.length;
+          
+          return {
+            contents: [{
+              uri: request.params.uri,
+              mimeType: "text/plain",
+              text: tasksContent
+            }]
+          };
+        }
         
-        const taskList = phase.tasks.map(task => 
-          `- [${task.completed ? 'x' : ' '}] ${task.description} (ID: ${task.id})`
-        ).join('\n');
-        
-        const phaseDetails = `
+        // Handle phase-specific resources
+        if (subResource === "phase" && parts.length >= 2) {
+          const phaseId = parts[1];
+          const phase = feature.phases.find(p => p.id === phaseId);
+          
+          if (!phase) {
+            throw new Error(`Phase ${phaseId} not found in feature ${feature.name}`);
+          }
+          
+          // Return phase details
+          if (parts.length === 2) {
+            const completedTasks = phase.tasks.filter(t => t.completed).length;
+            const totalTasks = phase.tasks.length;
+            
+            const taskList = phase.tasks.map(task => 
+              `- [${task.completed ? 'x' : ' '}] ${task.description} (ID: ${task.id})`
+            ).join('\n');
+            
+            const phaseDetails = `
 Phase: ${phase.name}
 ID: ${phase.id}
 Status: ${phase.status}
@@ -431,74 +454,85 @@ Progress: ${completedTasks}/${totalTasks} tasks completed
 Tasks:
 ${taskList}
 `;
-        
-        return {
-          contents: [{
-            uri: request.params.uri,
-            mimeType: "text/plain",
-            text: phaseDetails
-          }]
-        };
-      }
-      
-      // Return task listing
-      if (parts[3] === "tasks") {
-        if (phase.tasks.length === 0) {
-          return {
-            contents: [{
-              uri: request.params.uri,
-              mimeType: "text/plain",
-              text: `No tasks defined for phase: ${phase.name}`
-            }]
-          };
-        }
-        
-        const tasksContent = phase.tasks.map(task => `
+            
+            return {
+              contents: [{
+                uri: request.params.uri,
+                mimeType: "text/plain",
+                text: phaseDetails
+              }]
+            };
+          }
+          
+          // Return task listing
+          if (parts[2] === "tasks") {
+            if (phase.tasks.length === 0) {
+              return {
+                contents: [{
+                  uri: request.params.uri,
+                  mimeType: "text/plain",
+                  text: `No tasks defined for phase: ${phase.name}`
+                }]
+              };
+            }
+            
+            const tasksContent = phase.tasks.map(task => `
 Task: ${task.description}
 ID: ${task.id}
 Status: ${task.completed ? 'Completed' : 'Pending'}
 Created: ${task.createdAt.toISOString()}
 Last Updated: ${task.updatedAt.toISOString()}
 `).join('\n---\n');
-        
-        return {
-          contents: [{
-            uri: request.params.uri,
-            mimeType: "text/plain",
-            text: `# Tasks for Phase: ${phase.name}\n\n${tasksContent}`
-          }]
-        };
-      }
-      
-      // Return individual task details
-      if (parts[3] === "task" && parts.length === 5) {
-        const taskId = parts[4];
-        const task = phase.tasks.find(t => t.id === taskId);
-        
-        if (!task) {
-          throw new Error(`Task ${taskId} not found in phase ${phase.name}`);
-        }
-        
-        const taskDetails = `
+            
+            return {
+              contents: [{
+                uri: request.params.uri,
+                mimeType: "text/plain",
+                text: `# Tasks for Phase: ${phase.name}\n\n${tasksContent}`
+              }]
+            };
+          }
+          
+          // Return individual task details
+          if (parts[2] === "task" && parts.length === 4) {
+            const taskId = parts[3];
+            const task = phase.tasks.find(t => t.id === taskId);
+            
+            if (!task) {
+              throw new Error(`Task ${taskId} not found in phase ${phase.name}`);
+            }
+            
+            const taskDetails = `
 Task: ${task.description}
 ID: ${task.id}
 Status: ${task.completed ? 'Completed' : 'Pending'}
 Created: ${task.createdAt.toISOString()}
 Last Updated: ${task.updatedAt.toISOString()}
 `;
-        
-        return {
-          contents: [{
-            uri: request.params.uri,
-            mimeType: "text/plain",
-            text: taskDetails
-          }]
-        };
+            
+            return {
+              contents: [{
+                uri: request.params.uri,
+                mimeType: "text/plain",
+                text: taskDetails
+              }]
+            };
+          }
+        }
       }
     }
+    
+    throw new Error(`Resource not found: ${request.params.uri}`);
+  } catch (error: any) {
+    console.error(`Error reading resource ${request.params.uri}:`, error);
+    return {
+      contents: [{
+        uri: request.params.uri,
+        mimeType: "text/plain",
+        text: `Error: ${error.message || 'Unknown error'}`
+      }]
+    };
   }
-  
-  throw new Error("Resource not found");
 });
 
 /**
@@ -523,7 +557,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: "Initial description of the feature"
             }
           },
-          required: ["featureName"]
+          required: ["featureName"],
+          examples: [
+            {
+              featureName: "User Authentication",
+              initialDescription: "Add login and registration functionality to the application"
+            },
+            {
+              featureName: "Data Export",
+              initialDescription: "Allow users to export their data in CSV and JSON formats"
+            }
+          ]
         }
       },
       {
@@ -545,7 +589,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: "Answer to the clarification question"
             }
           },
-          required: ["featureId", "question", "answer"]
+          required: ["featureId", "question", "answer"],
+          examples: [
+            {
+              featureId: "feature-123",
+              question: "What problem does this feature solve?",
+              answer: "This feature solves the problem of users forgetting their passwords by providing a secure password reset flow."
+            },
+            {
+              featureId: "feature-456",
+              question: "Who are the target users?",
+              answer: "The target users are administrators who need to manage user accounts and permissions."
+            }
+          ]
         }
       },
       {
@@ -559,7 +615,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: "ID of the feature"
             }
           },
-          required: ["featureId"]
+          required: ["featureId"],
+          examples: [
+            {
+              featureId: "feature-123"
+            }
+          ]
         },
         handler: async (params: {featureId: string}) => {
           const { featureId } = params;
@@ -661,7 +722,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Description of the phase'
             }
           },
-          required: ['featureId', 'name', 'description']
+          required: ['featureId', 'name', 'description'],
+          examples: [
+            {
+              featureId: "feature-123",
+              name: "Requirements Analysis",
+              description: "Gather and analyze requirements for the feature"
+            },
+            {
+              featureId: "feature-123",
+              name: "Implementation",
+              description: "Implement the core functionality of the feature"
+            }
+          ]
         },
         handler: async (params: {featureId: string, name: string, description: string}) => {
           const { featureId, name, description } = params;
@@ -703,7 +776,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'New status for the phase (pending, in_progress, completed, reviewed)'
             }
           },
-          required: ['featureId', 'phaseId', 'status']
+          required: ['featureId', 'phaseId', 'status'],
+          examples: [
+            {
+              featureId: "feature-123",
+              phaseId: "phase-456",
+              status: "in_progress"
+            },
+            {
+              featureId: "feature-123",
+              phaseId: "phase-456",
+              status: "completed"
+            }
+          ]
         },
         handler: async (params: {featureId: string, phaseId: string, status: PhaseStatus}) => {
           const { featureId, phaseId, status } = params;
@@ -761,7 +846,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Description of the task'
             }
           },
-          required: ['featureId', 'phaseId', 'description']
+          required: ['featureId', 'phaseId', 'description'],
+          examples: [
+            {
+              featureId: "feature-123",
+              phaseId: "phase-456",
+              description: "Create database migration scripts"
+            },
+            {
+              featureId: "feature-123",
+              phaseId: "phase-456",
+              description: "Implement user interface components"
+            }
+          ]
         },
         handler: async (params: {featureId: string, phaseId: string, description: string}) => {
           const { featureId, phaseId, description } = params;
@@ -814,7 +911,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Whether the task is completed'
             }
           },
-          required: ['featureId', 'phaseId', 'taskId', 'completed']
+          required: ['featureId', 'phaseId', 'taskId', 'completed'],
+          examples: [
+            {
+              featureId: "feature-123",
+              phaseId: "phase-456",
+              taskId: "task-789",
+              completed: true
+            },
+            {
+              featureId: "feature-123",
+              phaseId: "phase-456",
+              taskId: "task-789",
+              completed: false
+            }
+          ]
         },
         handler: async (params: {featureId: string, phaseId: string, taskId: string, completed: boolean}) => {
           const { featureId, phaseId, taskId, completed } = params;
@@ -872,7 +983,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'ID of the feature'
             }
           },
-          required: ['featureId']
+          required: ['featureId'],
+          examples: [
+            {
+              featureId: "feature-123"
+            }
+          ]
         },
         handler: async (params: {featureId: string}) => {
           const { featureId } = params;

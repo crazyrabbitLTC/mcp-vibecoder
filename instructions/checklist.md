@@ -38,7 +38,7 @@
 - [x] Implement error handling for tools
 - [x] Ensure proper argument validation
 - [x] Add support for tool discoverability
-- [ ] Test tool invocations with example data
+- [x] Test tool invocations with example data
 
 ## Step 7: Prompt Implementation
 - [ ] Create clarify_feature prompt
