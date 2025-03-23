@@ -10,6 +10,7 @@ This MCP server helps LLMs build features in an organized, clean, and safe manne
 - PRD and implementation plan generation
 - Phased development with task tracking
 - Progress tracking and status reporting
+- Document storage and retrieval capabilities
 
 ## Features
 
@@ -27,9 +28,51 @@ This MCP server helps LLMs build features in an organized, clean, and safe manne
 - `update_phase_status` - Update the status of a phase
 - `update_task_status` - Update the completion status of a task
 - `get_next_phase_action` - Get guidance on what to do next
+- `get_document_path` - Get the path of a generated document
+- `save_document` - Save a document to a specific location
 
 ### Prompts
 - `feature-planning` - A prompt template for planning feature development
+
+## Document Storage
+
+The server now includes a hybrid document storage system that:
+
+1. Automatically saves generated documents (PRDs, implementation plans) to files
+2. Maintains an in-memory copy for quick access
+3. Allows clients to retrieve document paths and save to custom locations
+
+### Default Storage Location
+
+Documents are stored in the `documents/{featureId}/` directory by default, with filenames based on document type:
+
+- `documents/{featureId}/prd.md` - Product Requirements Document
+- `documents/{featureId}/implementation-plan.md` - Implementation Plan
+
+### Custom Storage
+
+You can use the `save_document` tool to save documents to custom locations:
+
+```json
+{
+  "featureId": "feature-123",
+  "documentType": "prd",
+  "filePath": "/custom/path/feature-123-prd.md"
+}
+```
+
+### Path Retrieval
+
+To get the path of a document, use the `get_document_path` tool:
+
+```json
+{
+  "featureId": "feature-123",
+  "documentType": "prd"
+}
+```
+
+This returns both the path and whether the document has been saved to disk.
 
 ## Development
 

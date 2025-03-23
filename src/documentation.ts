@@ -1,225 +1,118 @@
 /**
- * Documentation generation functions for the Vibe-Coder MCP Server.
- * This module handles generating PRDs and implementation plans from feature clarifications.
+ * @file documentation.ts
+ * @version 1.1.0
+ * @status STABLE - DO NOT MODIFY WITHOUT TESTS
+ * @lastModified 2023-03-23
+ * 
+ * Documentation module for the Vibe-Coder MCP Server.
+ * This module handles PRD and implementation plan generation
+ * based on clarification responses.
+ * 
+ * IMPORTANT:
+ * - Document generation uses structured templates
+ * - Output is stored both in-memory and in the file system
+ * 
+ * Functionality:
+ * - PRD generation
+ * - Implementation plan generation
+ * - Document storage via DocumentStorage module
  */
-import * as fs from 'fs';
-import * as path from 'path';
-import { Feature, ClarificationResponse, Phase } from './types.js';
+
+import { Feature, ClarificationResponse } from './types.js';
 import { formatDate } from './utils.js';
-
-/**
- * Load a template file and return its contents
- * @param templateName The name of the template file (without the path)
- * @returns The template content as a string
- * @throws Error if the template cannot be loaded
- */
-function loadTemplate(templateName: string): string {
-  try {
-    const templatePath = path.join(process.cwd(), 'src', 'templates', templateName);
-    return fs.readFileSync(templatePath, 'utf-8');
-  } catch (error) {
-    console.error(`Error loading template ${templateName}:`, error);
-    throw new Error(`Failed to load template ${templateName}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-/**
- * Generate a PRD document from a feature and its clarification responses
- * @param feature The feature to generate a PRD for
- * @returns The generated PRD markdown content
- */
-export function generatePRD(feature: Feature): string {
-  try {
-    const template = loadTemplate('prd-template.md');
-    
-    // Replace template variables
-    return template
-      .replace(/{{featureName}}/g, feature.name)
-      .replace(/{{featureDescription}}/g, feature.description || '')
-      .replace(/{{featureNameSlug}}/g, slugify(feature.name))
-      .replace(/{{stepNumber}}/g, '01')
-      .replace(/{{objectives}}/g, extractObjectivesFromClarifications(feature.clarificationResponses))
-      .replace(/{{requirements}}/g, extractRequirementsFromClarifications(feature.clarificationResponses))
-      .replace(/{{technicalSpecs}}/g, extractTechnicalSpecsFromClarifications(feature.clarificationResponses))
-      .replace(/{{implementationPhases}}/g, generateImplementationPhasesList(feature));
-  } catch (error) {
-    console.warn(`Template loading failed, falling back to basic PRD: ${error instanceof Error ? error.message : String(error)}`);
-    return generateBasicPRD(feature);
-  }
-}
-
-/**
- * Generate a basic PRD as fallback if template loading fails
- * @param feature The feature to generate a PRD for
- * @returns A basic PRD markdown content
- */
-function generateBasicPRD(feature: Feature): string {
-  return `# ${feature.name} PRD
-
-## 1. Introduction
-
-${feature.description}
-
-## 2. Feature Objectives
-
-${extractObjectivesFromClarifications(feature.clarificationResponses)}
-
-## 3. Scope and Requirements
-
-${extractRequirementsFromClarifications(feature.clarificationResponses)}
-
-## 4. Technical Specifications
-
-${extractTechnicalSpecsFromClarifications(feature.clarificationResponses)}
-
-## 5. Implementation Phases
-
-${generateImplementationPhasesList(feature)}
-
-## 6. Feedback and Iteration Process
-
-This PRD will be updated as the implementation progresses and feedback is received.
-`;
-}
-
-/**
- * Generate an implementation plan from a feature and its clarification responses
- * @param feature The feature to generate an implementation plan for
- * @returns The generated implementation plan markdown content
- */
-export function generateImplementationPlan(feature: Feature): string {
-  try {
-    const template = loadTemplate('implementation-plan-template.md');
-    
-    // Replace template variables
-    return template
-      .replace(/{{featureName}}/g, feature.name)
-      .replace(/{{featureDescription}}/g, feature.description || '')
-      .replace(/{{featureNameSlug}}/g, slugify(feature.name))
-      .replace(/{{stepNumber}}/g, '02')
-      .replace(/{{objectives}}/g, extractObjectivesFromClarifications(feature.clarificationResponses))
-      .replace(/{{requirements}}/g, extractRequirementsFromClarifications(feature.clarificationResponses))
-      .replace(/{{technicalSpecs}}/g, extractTechnicalSpecsFromClarifications(feature.clarificationResponses))
-      .replace(/{{implementationPhases}}/g, generateImplementationPhasesList(feature))
-      .replace(/{{developmentPhases}}/g, generateDefaultPhases(feature).map(p => `## ${p.name}\n\n${p.description}`).join('\n\n'))
-      .replace(/{{fileStructure}}/g, generateFileStructure(feature))
-      .replace(/{{nextSteps}}/g, generateNextSteps(feature).map(step => `- ${step}`).join('\n'));
-  } catch (error) {
-    console.warn(`Template loading failed, falling back to basic implementation plan: ${error instanceof Error ? error.message : String(error)}`);
-    return generateBasicImplementationPlan(feature);
-  }
-}
-
-/**
- * Generate a basic implementation plan as fallback if template loading fails
- * @param feature The feature to generate an implementation plan for
- * @returns A basic implementation plan markdown content
- */
-function generateBasicImplementationPlan(feature: Feature): string {
-  const phases = generateDefaultPhases(feature);
-  
-  let phasesContent = '';
-  phases.forEach((phase, index) => {
-    phasesContent += `\n### Phase ${index + 1}: ${phase.name}\n\n`;
-    phasesContent += `**Objectives**: ${phase.objectives}\n\n`;
-    phasesContent += `**Tasks**:\n`;
-    phase.tasks.forEach((task: string) => {
-      phasesContent += `- [ ] ${task}\n`;
-    });
-    phasesContent += `\n**Code Style & Practices**: ${phase.codeStyle}\n\n`;
-  });
-  
-  return `# ${feature.name} Implementation Plan
-
-## Overview
-
-${feature.description}
-
-## Implementation Steps
-${phasesContent}
-
-## File Structure
-
-\`\`\`
-${generateFileStructure(feature)}
-\`\`\`
-
-## Implementation Timeline
-
-${phases.map((phase, i) => `${i + 1}. **${phase.name}**: ${phase.timeEstimate || '1-2 days'}`).join('\n')}
-
-## Next Steps
-
-${generateNextSteps(feature).map((step, i) => `${i + 1}. ${step}`).join('\n')}
-`;
-}
+import { documentStorage, DocumentType } from './document-storage.js';
 
 /**
  * Extract objectives from clarification responses
- * @param responses The clarification responses to extract objectives from
- * @returns Markdown content for the objectives section
+ * @param responses Clarification responses
+ * @returns Array of objectives
  */
-export function extractObjectivesFromClarifications(responses: ClarificationResponse[]): string {
-  if (responses.length === 0) {
-    return "No objectives defined yet. Complete the clarification process to generate objectives.";
+export function extractObjectivesFromClarifications(responses: ClarificationResponse[]): string[] {
+  // Find the response to the problem question
+  const problemResponse = responses.find(r => 
+    r.question.toLowerCase().includes('what specific problem') ||
+    r.question.toLowerCase().includes('what problem')
+  );
+  
+  if (!problemResponse) return [];
+  
+  // Extract objectives from the problem statement
+  const answer = problemResponse.answer;
+  const objectives: string[] = [];
+  
+  // If the response has numbered points or bullet points
+  if (answer.includes('\n- ') || answer.includes('\n* ') || /\n\d+\./.test(answer)) {
+    const lines = answer.split('\n').map(line => line.trim());
+    
+    for (const line of lines) {
+      // Look for bullet points or numbered lists
+      if (line.startsWith('- ') || line.startsWith('* ') || /^\d+\./.test(line)) {
+        // Clean up the line (remove the bullet or number)
+        const cleanLine = line.replace(/^- |^\* |^\d+\.\s*/, '');
+        objectives.push(cleanLine);
+      }
+    }
+  } else {
+    // No clear bullet points, try to extract sentences
+    const sentences = answer.split(/\.(?!\d)/g).map(s => s.trim()).filter(s => s.length > 10);
+    objectives.push(...sentences);
   }
-  
-  // Look for responses related to problems and users
-  const problemResponse = responses.find(r => r.question.includes("problem"));
-  const usersResponse = responses.find(r => r.question.includes("users"));
-  const successResponse = responses.find(r => r.question.includes("success"));
-  
-  let objectives = "Based on the clarification responses, this feature aims to:\n\n";
-  
-  if (problemResponse) {
-    objectives += `- **Solve a Problem**: ${problemResponse.answer}\n`;
-  }
-  
-  if (usersResponse) {
-    objectives += `- **Target Users**: ${usersResponse.answer}\n`;
-  }
-  
-  if (successResponse) {
-    objectives += `- **Success Criteria**: ${successResponse.answer}\n`;
-  }
-  
-  objectives += "\nThe key objectives are to create a solution that is:\n";
-  objectives += "- Clean and maintainable\n";
-  objectives += "- Well-documented\n";
-  objectives += "- Follows best practices\n";
   
   return objectives;
 }
 
 /**
  * Extract requirements from clarification responses
- * @param responses The clarification responses to extract requirements from
- * @returns Markdown content for the requirements section
+ * @param responses Clarification responses
+ * @returns Array of requirements
  */
-export function extractRequirementsFromClarifications(responses: ClarificationResponse[]): string {
-  if (responses.length === 0) {
-    return "No requirements defined yet. Complete the clarification process to generate requirements.";
-  }
+export function extractRequirementsFromClarifications(responses: ClarificationResponse[]): string[] {
+  // Find the response to the requirements question
+  const requirementsResponse = responses.find(r => 
+    r.question.toLowerCase().includes('key requirements')
+  );
   
-  // Look for responses related to requirements
-  const requirementsResponse = responses.find(r => r.question.includes("requirements"));
-  const dependenciesResponse = responses.find(r => r.question.includes("dependencies"));
+  if (!requirementsResponse) return [];
   
-  let requirements = "Based on the clarification responses, this feature requires:\n\n";
+  // Extract requirements from the response
+  const answer = requirementsResponse.answer;
+  const requirements: string[] = [];
   
-  if (requirementsResponse) {
-    // Split the requirements by common delimiters and format as a list
-    const reqList = requirementsResponse.answer
-      .split(/[,.;]/)
-      .filter(item => item.trim().length > 0)
-      .map(item => `- ${item.trim()}`);
+  // If the response has numbered points or bullet points
+  if (answer.includes('\n- ') || answer.includes('\n* ') || /\n\d+\./.test(answer)) {
+    const lines = answer.split('\n').map(line => line.trim());
     
-    requirements += reqList.join('\n');
-    requirements += '\n\n';
-  }
-  
-  if (dependenciesResponse) {
-    requirements += `**Dependencies**:\n${dependenciesResponse.answer}\n\n`;
+    for (const line of lines) {
+      // Look for bullet points or numbered lists
+      if (line.startsWith('- ') || line.startsWith('* ') || /^\d+\.\s*/.test(line)) {
+        // Clean up the line (remove the bullet or number)
+        let cleanLine = line.replace(/^- |^\* |^\d+\.\s*/, '');
+        
+        // Check if the line itself contains a nested list
+        if (cleanLine.includes(':')) {
+          const [req, details] = cleanLine.split(':');
+          requirements.push(req.trim());
+          
+          // If there are nested items, add them as separate requirements
+          if (details && (details.includes(', ') || details.includes(' and '))) {
+            const nestedItems = details
+              .split(/,\s*|\s+and\s+/)
+              .map(item => item.trim())
+              .filter(Boolean);
+            
+            for (const item of nestedItems) {
+              requirements.push(`${req.trim()} - ${item}`);
+            }
+          }
+        } else {
+          requirements.push(cleanLine);
+        }
+      }
+    }
+  } else {
+    // No clear bullet points, try to extract sentences
+    const sentences = answer.split(/\.(?!\d)/g).map(s => s.trim()).filter(s => s.length > 10);
+    requirements.push(...sentences);
   }
   
   return requirements;
@@ -227,175 +120,253 @@ export function extractRequirementsFromClarifications(responses: ClarificationRe
 
 /**
  * Extract technical specifications from clarification responses
- * @param responses The clarification responses to extract technical specifications from
- * @returns Markdown content for the technical specifications section
+ * @param responses Clarification responses
+ * @returns Array of technical specifications
  */
-export function extractTechnicalSpecsFromClarifications(responses: ClarificationResponse[]): string {
-  if (responses.length === 0) {
-    return "No technical specifications defined yet. Complete the clarification process.";
+export function extractTechnicalSpecsFromClarifications(responses: ClarificationResponse[]): string[] {
+  // Find the response to the technical constraints question
+  const technicalResponse = responses.find(r => 
+    r.question.toLowerCase().includes('technical constraints') ||
+    r.question.toLowerCase().includes('technical considerations')
+  );
+  
+  if (!technicalResponse) return [];
+  
+  // Extract technical specifications from the response
+  const answer = technicalResponse.answer;
+  const specs: string[] = [];
+  
+  // If the response has numbered points or bullet points
+  if (answer.includes('\n- ') || answer.includes('\n* ') || /\n\d+\./.test(answer)) {
+    const lines = answer.split('\n').map(line => line.trim());
+    
+    for (const line of lines) {
+      // Look for bullet points or numbered lists
+      if (line.startsWith('- ') || line.startsWith('* ') || /^\d+\.\s*/.test(line)) {
+        // Clean up the line (remove the bullet or number)
+        const cleanLine = line.replace(/^- |^\* |^\d+\.\s*/, '');
+        specs.push(cleanLine);
+      }
+    }
+  } else {
+    // No clear bullet points, try to extract sentences
+    const sentences = answer.split(/\.(?!\d)/g).map(s => s.trim()).filter(s => s.length > 10);
+    specs.push(...sentences);
   }
-  
-  // Look for responses related to technical constraints
-  const technicalResponse = responses.find(r => r.question.includes("technical constraints") || r.question.includes("considerations"));
-  const risksResponse = responses.find(r => r.question.includes("risks") || r.question.includes("challenges"));
-  
-  let specs = "";
-  
-  if (technicalResponse) {
-    specs += `**Technical Constraints**:\n${technicalResponse.answer}\n\n`;
-  }
-  
-  if (risksResponse) {
-    specs += `**Potential Risks and Challenges**:\n${risksResponse.answer}\n\n`;
-  }
-  
-  specs += `**Development Approach**:\n`;
-  specs += `- Use TypeScript for type safety\n`;
-  specs += `- Follow functional programming principles\n`;
-  specs += `- Implement thorough testing\n`;
-  specs += `- Use modular design\n`;
   
   return specs;
 }
 
 /**
- * Generate a list of implementation phases for the PRD
- * @param feature The feature to generate phases for
- * @returns Markdown content for the implementation phases section
+ * Generate a Product Requirements Document (PRD) for a feature
+ * @param feature The feature to generate a PRD for
+ * @returns The PRD document as a markdown string
  */
-function generateImplementationPhasesList(feature: Feature): string {
-  const phases = generateDefaultPhases(feature);
+export function generatePRD(feature: Feature): string {
+  const { name, description, clarificationResponses } = feature;
   
-  let phasesList = "";
-  phases.forEach((phase, index) => {
-    phasesList += `**Phase ${index + 1}: ${phase.name}**\n`;
-    phasesList += `${phase.objectives}\n\n`;
-  });
+  // Find specific clarification responses
+  const problemResponse = clarificationResponses.find(r => 
+    r.question.toLowerCase().includes('what specific problem') ||
+    r.question.toLowerCase().includes('what problem')
+  );
   
-  return phasesList;
+  const usersResponse = clarificationResponses.find(r => 
+    r.question.toLowerCase().includes('target users')
+  );
+  
+  const requirementsResponse = clarificationResponses.find(r => 
+    r.question.toLowerCase().includes('key requirements')
+  );
+  
+  const technicalResponse = clarificationResponses.find(r => 
+    r.question.toLowerCase().includes('technical constraints') ||
+    r.question.toLowerCase().includes('technical considerations')
+  );
+  
+  const metricsResponse = clarificationResponses.find(r => 
+    r.question.toLowerCase().includes('measure') && 
+    r.question.toLowerCase().includes('success')
+  );
+  
+  const dependenciesResponse = clarificationResponses.find(r => 
+    r.question.toLowerCase().includes('dependencies')
+  );
+  
+  const risksResponse = clarificationResponses.find(r => 
+    r.question.toLowerCase().includes('risks') ||
+    r.question.toLowerCase().includes('challenges')
+  );
+  
+  // Extract structured information
+  const objectives = extractObjectivesFromClarifications(clarificationResponses);
+  const requirements = extractRequirementsFromClarifications(clarificationResponses);
+  const technicalSpecs = extractTechnicalSpecsFromClarifications(clarificationResponses);
+  
+  // Format the PRD
+  const prd = `# ${name} - Product Requirements Document
+
+## 1. Introduction
+
+### 1.1 Purpose
+${problemResponse ? problemResponse.answer : description}
+
+### 1.2 Scope
+This document outlines the requirements and specifications for the ${name} feature.
+
+### 1.3 Background
+${description}
+
+## 2. Product Overview
+
+### 2.1 Product Description
+${description}
+
+### 2.2 Target Users
+${usersResponse ? usersResponse.answer : 'To be determined during development.'}
+
+## 3. Functional Requirements
+
+${requirements.map((req, index) => `### 3.${index + 1} ${req}`).join('\n\n')}
+
+## 4. Non-Functional Requirements
+
+### 4.1 Technical Constraints
+${technicalResponse ? technicalResponse.answer : 'No specific technical constraints identified.'}
+
+### 4.2 Performance Requirements
+${technicalSpecs.filter(spec => 
+  spec.toLowerCase().includes('performance') || 
+  spec.toLowerCase().includes('speed') ||
+  spec.toLowerCase().includes('time') ||
+  spec.toLowerCase().includes('fast')
+).map(spec => `- ${spec}`).join('\n') || 'No specific performance requirements identified.'}
+
+## 5. Success Metrics
+
+### 5.1 Key Performance Indicators
+${metricsResponse ? metricsResponse.answer : 'Success metrics to be determined.'}
+
+## 6. Dependencies
+
+### 6.1 System Dependencies
+${dependenciesResponse ? dependenciesResponse.answer : 'No specific dependencies identified.'}
+
+## 7. Risks and Challenges
+
+### 7.1 Identified Risks
+${risksResponse ? risksResponse.answer : 'Risks to be assessed during development.'}
+
+## 8. Milestones and Implementation Plan
+
+Refer to the Implementation Plan document for detailed phases and tasks.
+
+---
+
+Generated on: ${formatDate(new Date())}
+`;
+
+  // Store the generated PRD in the document storage system
+  documentStorage.storeDocument(feature.id, DocumentType.PRD, prd)
+    .catch(error => console.error(`Failed to store PRD document: ${error}`));
+  
+  return prd;
 }
 
 /**
- * Generate default implementation phases based on the feature
- * @param feature The feature to generate phases for
- * @returns An array of phase objects
+ * Generate an implementation plan for a feature
+ * @param feature The feature to generate an implementation plan for
+ * @returns The implementation plan as a markdown string
  */
-function generateDefaultPhases(feature: Feature): any[] {
-  // If the feature already has phases defined, use those
-  if (feature.phases && feature.phases.length > 0) {
-    return feature.phases.map(phase => ({
-      name: phase.name,
-      objectives: phase.description,
-      tasks: phase.tasks.map(task => task.description),
-      codeStyle: "Follow TypeScript best practices, use functional programming where appropriate, and ensure thorough testing.",
-      timeEstimate: "1-2 days"
-    }));
-  }
+export function generateImplementationPlan(feature: Feature): string {
+  const { name, description, clarificationResponses } = feature;
   
-  // Otherwise, generate default phases
-  return [
-    {
-      name: "Requirements Analysis and Design",
-      objectives: "Analyze requirements, design the architecture, and create a detailed implementation plan.",
-      tasks: [
-        "Review and analyze clarification responses",
-        "Identify key components and their interactions",
-        "Design the system architecture",
-        "Create UML diagrams if necessary",
-        "Identify potential edge cases and risks"
-      ],
-      codeStyle: "Create clear documentation with diagrams and detailed explanations.",
-      timeEstimate: "1-2 days"
-    },
-    {
-      name: "Core Implementation",
-      objectives: "Implement the core functionality based on the design.",
-      tasks: [
-        "Set up project structure and dependencies",
-        "Implement data models and interfaces",
-        "Build core business logic",
-        "Create unit tests for core functionality",
-        "Ensure code follows best practices"
-      ],
-      codeStyle: "Use TypeScript with clear typing, follow functional programming principles, and use TDD where appropriate.",
-      timeEstimate: "2-3 days"
-    },
-    {
-      name: "Testing and Integration",
-      objectives: "Test all components, integrate with existing systems, and refine the implementation.",
-      tasks: [
-        "Write unit tests for all components",
-        "Perform integration testing",
-        "Fix bugs and edge cases",
-        "Optimize performance",
-        "Document any known limitations"
-      ],
-      codeStyle: "Focus on test coverage and quality, fix edge cases, and document limitations.",
-      timeEstimate: "1-2 days"
-    },
-    {
-      name: "Documentation and Finalization",
-      objectives: "Finalize documentation, clean up code, and prepare for deployment.",
-      tasks: [
-        "Complete inline code documentation",
-        "Create user documentation",
-        "Clean up and refactor code",
-        "Prepare deployment strategy",
-        "Create final pull request"
-      ],
-      codeStyle: "Ensure comprehensive documentation, clean code, and prepare for smooth deployment.",
-      timeEstimate: "1 day"
-    }
-  ];
-}
-
-/**
- * Generate a file structure based on the feature
- * @param feature The feature to generate a file structure for
- * @returns A string representation of the file structure
- */
-function generateFileStructure(feature: Feature): string {
-  const featureNameSlug = slugify(feature.name);
+  // Find specific clarification responses
+  const requirementsResponse = clarificationResponses.find(r => 
+    r.question.toLowerCase().includes('key requirements')
+  );
   
-  return `src/
-  ├── ${featureNameSlug}/
-  │   ├── index.ts                 # Main entry point
-  │   ├── types.ts                 # Type definitions
-  │   ├── components/              # UI components (if applicable)
-  │   │   └── index.ts
-  │   ├── hooks/                   # Custom hooks (if applicable)
-  │   │   └── index.ts
-  │   ├── utils/                   # Utility functions
-  │   │   └── index.ts
-  │   └── tests/                   # Tests
-  │       └── index.test.ts
-  └── index.ts                     # Re-export public API`;
-}
+  const technicalResponse = clarificationResponses.find(r => 
+    r.question.toLowerCase().includes('technical constraints') ||
+    r.question.toLowerCase().includes('technical considerations')
+  );
+  
+  const dependenciesResponse = clarificationResponses.find(r => 
+    r.question.toLowerCase().includes('dependencies')
+  );
+  
+  // Extract structured information
+  const requirements = extractRequirementsFromClarifications(clarificationResponses);
+  const technicalSpecs = extractTechnicalSpecsFromClarifications(clarificationResponses);
+  
+  // Format the implementation plan
+  const implementationPlan = `# ${name} - Implementation Plan
 
-/**
- * Generate next steps for implementing the feature
- * @param feature The feature to generate next steps for
- * @returns An array of next steps
- */
-function generateNextSteps(feature: Feature): string[] {
-  return [
-    "Set up the project structure and dependencies",
-    "Implement core functionality based on the PRD",
-    "Write comprehensive tests for all components",
-    "Create clear documentation for users and developers",
-    "Prepare for code review and deployment"
-  ];
-}
+## 1. Overview
 
-/**
- * Convert a string to a slug format
- * @param str The string to convert
- * @returns The slug version of the string
- */
-function slugify(str: string): string {
-  return str
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+${description}
+
+## 2. Requirements Summary
+
+${requirementsResponse ? requirementsResponse.answer : 'Requirements to be determined.'}
+
+## 3. Technical Approach
+
+${technicalResponse ? technicalResponse.answer : 'Technical approach to be determined during development.'}
+
+## 4. Implementation Phases
+
+### Phase 1: Setup and Initial Development
+
+**Description**: Set up the development environment and implement core functionality.
+
+**Tasks**:
+${requirements.slice(0, Math.ceil(requirements.length / 3)).map(req => `- Implement ${req}`).join('\n')}
+
+### Phase 2: Core Feature Implementation
+
+**Description**: Implement the main feature components and functionality.
+
+**Tasks**:
+${requirements.slice(Math.ceil(requirements.length / 3), Math.ceil(requirements.length * 2 / 3)).map(req => `- Implement ${req}`).join('\n')}
+
+### Phase 3: Testing and Refinement
+
+**Description**: Test the feature thoroughly and refine based on feedback.
+
+**Tasks**:
+${requirements.slice(Math.ceil(requirements.length * 2 / 3)).map(req => `- Test and refine ${req}`).join('\n')}
+- Write automated tests for all functionality
+- Conduct code review
+- Performance optimization
+
+## 5. Dependencies and Prerequisites
+
+${dependenciesResponse ? dependenciesResponse.answer : 'No specific dependencies identified.'}
+
+## 6. Timeline Estimate
+
+- Phase 1: 1-2 weeks
+- Phase 2: 2-3 weeks
+- Phase 3: 1-2 weeks
+
+Total estimated time: 4-7 weeks, depending on complexity and available resources.
+
+## 7. Resources Required
+
+- Developer time: 1-2 developers
+- Testing resources
+- Technical documentation
+- Any specific tools or libraries mentioned in dependencies
+
+---
+
+Generated on: ${formatDate(new Date())}
+`;
+
+  // Store the generated implementation plan in the document storage system
+  documentStorage.storeDocument(feature.id, DocumentType.IMPLEMENTATION_PLAN, implementationPlan)
+    .catch(error => console.error(`Failed to store implementation plan document: ${error}`));
+  
+  return implementationPlan;
 } 

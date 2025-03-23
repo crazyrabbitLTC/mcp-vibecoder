@@ -34,6 +34,7 @@ import {
 } from './clarification.js';
 import { generatePRD, generateImplementationPlan } from './documentation.js';
 import { createFeatureObject, generateFeatureProgressSummary, createPhaseObject, createTaskObject, now } from './utils.js';
+import { documentStorage, DocumentType } from './document-storage.js';
 
 /**
  * Create an MCP server
@@ -624,6 +625,98 @@ server.prompt(
       }
     }]
   })
+);
+
+// Get document path tool
+server.tool(
+  "get_document_path",
+  {
+    featureId: z.string().min(1),
+    documentType: z.enum([DocumentType.PRD, DocumentType.IMPLEMENTATION_PLAN])
+  },
+  async ({ featureId, documentType }) => {
+    try {
+      // Check if the feature exists
+      const feature = getFeature(featureId);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Check if the document exists
+      if (!documentStorage.hasDocument(featureId, documentType)) {
+        throw new Error(`Document of type ${documentType} not found for feature ${featureId}`);
+      }
+      
+      // Get the default file path for the document
+      const filePath = documentStorage.getDefaultFilePath(featureId, documentType);
+      
+      // Get the document to check if it's been saved
+      const document = documentStorage.getDocument(featureId, documentType);
+      
+      return {
+        content: [{
+          type: "text",
+          text: `Document path: ${filePath}\nSaved to disk: ${document?.metadata.isSaved ? 'Yes' : 'No'}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: "text",
+          text: `Error retrieving document path: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Save document to custom path tool
+server.tool(
+  "save_document",
+  {
+    featureId: z.string().min(1),
+    documentType: z.enum([DocumentType.PRD, DocumentType.IMPLEMENTATION_PLAN]),
+    filePath: z.string().min(1).optional()
+  },
+  async ({ featureId, documentType, filePath }) => {
+    try {
+      // Check if the feature exists
+      const feature = getFeature(featureId);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Check if the document exists
+      if (!documentStorage.hasDocument(featureId, documentType)) {
+        throw new Error(`Document of type ${documentType} not found for feature ${featureId}`);
+      }
+      
+      let savedPath: string;
+      
+      // If a custom path was provided, use it; otherwise, save to the default path
+      if (filePath) {
+        savedPath = await documentStorage.saveDocumentToCustomPath(featureId, documentType, filePath);
+      } else {
+        savedPath = await documentStorage.saveDocumentToFile(featureId, documentType);
+      }
+      
+      return {
+        content: [{
+          type: "text",
+          text: `Document saved successfully to: ${savedPath}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: "text",
+          text: `Error saving document: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
 );
 
 // Start the server

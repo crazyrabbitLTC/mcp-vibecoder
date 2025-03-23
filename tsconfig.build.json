@@ -10,6 +10,21 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/mcp-server.ts", "src/types.ts", "src/storage.ts", "src/utils.ts", "src/clarification.ts", "src/documentation.ts"],
-  "exclude": ["node_modules", "src/registry.ts", "src/resource-handlers.ts", "src/tool-handlers.ts", "src/index.ts", "src/index-updated.ts"]
+  "include": [
+    "src/mcp-server.ts", 
+    "src/types.ts", 
+    "src/storage.ts", 
+    "src/utils.ts", 
+    "src/clarification.ts", 
+    "src/documentation.ts",
+    "src/document-storage.ts"
+  ],
+  "exclude": [
+    "node_modules", 
+    "src/registry.ts", 
+    "src/resource-handlers.ts", 
+    "src/tool-handlers.ts", 
+    "src/index.ts", 
+    "src/index-updated.ts"
+  ]
 } 
