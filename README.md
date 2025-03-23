@@ -21,8 +21,7 @@ This MCP server helps LLMs build features in an organized, clean, and safe manne
 ### Tools
 - `start_feature_clarification` - Begin the feature clarification process
 - `provide_clarification` - Answer clarification questions about a feature
-- `generate_prd` - Generate a Product Requirements Document
-- `generate_implementation_plan` - Create a detailed implementation plan
+- `generate_prd` - Generate a Product Requirements Document and implementation plan
 - `create_phase` - Create a development phase for a feature
 - `add_task` - Add tasks to a development phase
 - `update_phase_status` - Update the status of a phase
@@ -115,3 +114,13 @@ server.prompt(
 const transport = new StdioServerTransport();
 await server.connect(transport);
 ```
+
+## Workflow
+
+The Vibe-Coder MCP server is designed to guide the development process through the following steps:
+
+1. **Feature Clarification**: Start by gathering requirements and understanding the feature's purpose, target users, and constraints
+2. **Documentation**: Generate a PRD and implementation plan based on the clarified requirements
+3. **Phased Development**: Break down the implementation into logical phases with clear tasks
+4. **Progress Tracking**: Monitor the completion of tasks and phases to guide development
+5. **Completion**: Verify that all requirements have been implemented and the feature is ready for use
