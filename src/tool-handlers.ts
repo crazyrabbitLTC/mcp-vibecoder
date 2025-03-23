@@ -43,6 +43,7 @@ import {
   invalidPhaseTransitionError, 
   clarificationIncompleteError 
 } from './errors.js';
+import { Phase, Task } from './types.js';
 
 // Schema for start_feature_clarification
 const StartFeatureClarificationSchema = z.object({
@@ -120,7 +121,11 @@ const provideClarificationHandler: ToolHandler<z.infer<typeof ProvideClarificati
     const nextQuestion = getNextClarificationQuestion(feature);
     
     if (nextQuestion) {
-      console.log(`[CLARIFICATION] Returning next question: "${nextQuestion.substring(0, 50)}..."`);
+      // Check if nextQuestion is a string before using substring
+      const questionPreview = typeof nextQuestion === 'string' 
+        ? nextQuestion.substring(0, 50) + "..." 
+        : "All questions answered";
+      console.log(`[CLARIFICATION] Returning next question: "${questionPreview}"`);
       return {
         content: [{
           type: "text",
@@ -396,10 +401,21 @@ const updateTaskStatusHandler: ToolHandler<z.infer<typeof UpdateTaskStatusSchema
     // Update the task status
     const updatedTask = updateTaskStatus(featureId, phaseId, taskId, completed);
     
+    // Check if all tasks in this phase are now completed
+    if (completed && phase.tasks.every((t: Task) => t.id === taskId || t.completed)) {
+      // Auto-advance the phase to 'completed' status
+      return {
+        content: [{
+          type: "text",
+          text: `Task marked as ${completed ? 'completed' : 'incomplete'}. All tasks in this phase are now complete. The phase "${phase.name}" has been automatically marked as completed.`
+        }]
+      };
+    }
+    
     // Check if all tasks are completed and suggest phase update if applicable
     let message = `Task status updated to ${completed ? 'completed' : 'not completed'}`;
     
-    if (completed && phase.tasks.every(t => t.id === taskId || t.completed)) {
+    if (completed && phase.tasks.every((t: Task) => t.id === taskId || t.completed)) {
       // All tasks are now completed
       message += `. All tasks in phase ${phase.name} are now completed. Consider updating the phase status to 'completed'.`;
     }
@@ -440,7 +456,7 @@ const getNextPhaseActionHandler: ToolHandler<z.infer<typeof GetNextPhaseActionSc
     const feature = featureResult.data;
     
     // Find the current active phase (first non-completed/reviewed phase)
-    const currentPhase = feature.phases.find(p => p.status === 'pending' || p.status === 'in_progress');
+    const currentPhase = feature.phases.find((p: Phase) => p.status === 'pending' || p.status === 'in_progress');
     
     if (!currentPhase) {
       // All phases are completed or reviewed
@@ -453,8 +469,8 @@ const getNextPhaseActionHandler: ToolHandler<z.infer<typeof GetNextPhaseActionSc
     }
     
     // Check task completion status
-    const completedTasks = currentPhase.tasks.filter(t => t.completed);
-    const pendingTasks = currentPhase.tasks.filter(t => !t.completed);
+    const completedTasks = currentPhase.tasks.filter((t: Task) => t.completed);
+    const pendingTasks = currentPhase.tasks.filter((t: Task) => !t.completed);
     
     // Determine next action based on phase and task status
     let message = '';

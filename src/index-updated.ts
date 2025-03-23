@@ -25,7 +25,10 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 // Import core modules
-import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
+// Create our own ResourceTemplate class since we can't access the SDK's directly
+class ResourceTemplate {
+  constructor(public pattern: string, public metadata: any) {}
+}
 import { Feature, FeatureStorage, PhaseStatus, Phase, Task, ClarificationResponse } from './types.js';
 import { features, storeFeature, getFeature, updateFeature, listFeatures } from './storage.js';
 import { 

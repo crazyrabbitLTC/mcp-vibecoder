@@ -6,7 +6,10 @@
  * These handlers are registered with the resource registry for consistent handling.
  */
 
-import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
+// Create our own ResourceTemplate class since we can't access the SDK's directly
+class ResourceTemplate {
+  constructor(public pattern: string, public metadata: any) {}
+}
 import { resourceRegistry, ResourceHandler } from './registry.js';
 import { Feature } from './types.js';
 import { listFeatures, getFeature } from './storage.js';
