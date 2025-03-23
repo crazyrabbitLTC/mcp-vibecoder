@@ -627,107 +627,9 @@ server.prompt(
   })
 );
 
-// Get document path tool
+// Document path tool
 server.tool(
   "get_document_path",
-  {
-    featureId: z.string().min(1),
-    documentType: z.enum(['prd', 'implementation-plan'])
-  },
-  async ({ featureId, documentType }) => {
-    try {
-      // Check if the feature exists
-      const feature = getFeature(featureId);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
-      
-      // Convert string enum value to DocumentType enum
-      const docType = documentType as unknown as DocumentType;
-      
-      // Check if the document exists
-      if (!documentStorage.hasDocument(featureId, docType)) {
-        throw new Error(`Document of type ${documentType} not found for feature ${featureId}`);
-      }
-      
-      // Get the default file path for the document
-      const filePath = documentStorage.getDefaultFilePath(featureId, docType);
-      
-      // Get the document to check if it's been saved
-      const document = documentStorage.getDocument(featureId, docType);
-      
-      return {
-        content: [{
-          type: "text",
-          text: `Document path: ${filePath}\nSaved to disk: ${document?.metadata.isSaved ? 'Yes' : 'No'}`
-        }]
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: "text",
-          text: `Error retrieving document path: ${error instanceof Error ? error.message : String(error)}`
-        }],
-        isError: true
-      };
-    }
-  }
-);
-
-// Save document to custom path tool
-server.tool(
-  "save_document",
-  {
-    featureId: z.string().min(1),
-    documentType: z.enum(['prd', 'implementation-plan']),
-    filePath: z.string().min(1).optional()
-  },
-  async ({ featureId, documentType, filePath }) => {
-    try {
-      // Check if the feature exists
-      const feature = getFeature(featureId);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
-      
-      // Convert string enum value to DocumentType enum
-      const docType = documentType as unknown as DocumentType;
-      
-      // Check if the document exists
-      if (!documentStorage.hasDocument(featureId, docType)) {
-        throw new Error(`Document of type ${documentType} not found for feature ${featureId}`);
-      }
-      
-      let savedPath: string;
-      
-      // If a custom path was provided, use it; otherwise, save to the default path
-      if (filePath) {
-        savedPath = await documentStorage.saveDocumentToCustomPath(featureId, docType, filePath);
-      } else {
-        savedPath = await documentStorage.saveDocumentToFile(featureId, docType);
-      }
-      
-      return {
-        content: [{
-          type: "text",
-          text: `Document saved successfully to: ${savedPath}`
-        }]
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: "text",
-          text: `Error saving document: ${error instanceof Error ? error.message : String(error)}`
-        }],
-        isError: true
-      };
-    }
-  }
-);
-
-// New simplified document path tool that avoids enum serialization issues
-server.tool(
-  "document_path_simple",
   {
     featureId: z.string().min(1),
     documentType: z.string().min(1)
@@ -751,15 +653,15 @@ server.tool(
       }
       
       // Check if the document exists
-      if (!documentStorage.hasDocument(featureId, docType)) {
-        throw new Error(`Document of type ${documentType} not found for feature ${featureId}`);
+      if (!documentStorage.hasDocument(feature.id, docType)) {
+        throw new Error(`Document of type ${documentType} not found for feature ${feature.id}`);
       }
       
       // Get the default file path for the document
-      const filePath = documentStorage.getDefaultFilePath(featureId, docType);
+      const filePath = documentStorage.getDefaultFilePath(feature.id, docType);
       
       // Get the document to check if it's been saved
-      const document = documentStorage.getDocument(featureId, docType);
+      const document = documentStorage.getDocument(feature.id, docType);
       
       return {
         content: [{
@@ -779,9 +681,9 @@ server.tool(
   }
 );
 
-// New simplified document save tool that avoids enum serialization issues
+// Document save tool
 server.tool(
-  "document_save_simple",
+  "save_document",
   {
     featureId: z.string().min(1),
     documentType: z.string().min(1),
@@ -806,17 +708,17 @@ server.tool(
       }
       
       // Check if the document exists
-      if (!documentStorage.hasDocument(featureId, docType)) {
-        throw new Error(`Document of type ${documentType} not found for feature ${featureId}`);
+      if (!documentStorage.hasDocument(feature.id, docType)) {
+        throw new Error(`Document of type ${documentType} not found for feature ${feature.id}`);
       }
       
       let savedPath: string;
       
       // If a custom path was provided, use it; otherwise, save to the default path
       if (filePath) {
-        savedPath = await documentStorage.saveDocumentToCustomPath(featureId, docType, filePath);
+        savedPath = await documentStorage.saveDocumentToCustomPath(feature.id, docType, filePath);
       } else {
-        savedPath = await documentStorage.saveDocumentToFile(featureId, docType);
+        savedPath = await documentStorage.saveDocumentToFile(feature.id, docType);
       }
       
       return {

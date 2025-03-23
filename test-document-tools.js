@@ -66,9 +66,9 @@ async function createTestFeature() {
   return feature;
 }
 
-// Function to test the document_path_simple tool logic
-async function testDocumentPathSimple(feature) {
-  console.log('\nTesting document_path_simple tool logic...');
+// Function to test the document_path tool logic
+async function testDocumentPath(feature) {
+  console.log('\nTesting document_path tool logic...');
   
   try {
     // Map string to DocumentType enum
@@ -102,14 +102,14 @@ async function testDocumentPathSimple(feature) {
       isSaved: document?.metadata.isSaved
     };
   } catch (error) {
-    console.error(`Error in document_path_simple: ${error.message}`);
+    console.error(`Error in document_path: ${error.message}`);
     return null;
   }
 }
 
-// Function to test the document_save_simple tool logic
-async function testDocumentSaveSimple(feature, customPath = null) {
-  console.log('\nTesting document_save_simple tool logic...');
+// Function to test the document_save tool logic
+async function testDocumentSave(feature, customPath = null) {
+  console.log('\nTesting document_save tool logic...');
   
   try {
     // Map string to DocumentType enum
@@ -142,7 +142,7 @@ async function testDocumentSaveSimple(feature, customPath = null) {
     
     return savedPath;
   } catch (error) {
-    console.error(`Error in document_save_simple: ${error.message}`);
+    console.error(`Error in document_save: ${error.message}`);
     return null;
   }
 }
@@ -156,15 +156,15 @@ async function main() {
     const feature = await createTestFeature();
     console.log(`Feature created with ID: ${feature.id}`);
     
-    // Test document_path_simple tool logic
-    const pathResult = await testDocumentPathSimple(feature);
+    // Test document_path tool logic
+    const pathResult = await testDocumentPath(feature);
     
-    // Test document_save_simple tool logic
-    const saveResult = await testDocumentSaveSimple(feature);
+    // Test document_save tool logic
+    const saveResult = await testDocumentSave(feature);
     
     // Test with a custom path
     const customPath = `./documents/test-document-tools-${Date.now()}.md`;
-    const customSaveResult = await testDocumentSaveSimple(feature, customPath);
+    const customSaveResult = await testDocumentSave(feature, customPath);
     
     // Print summary
     console.log('\n=== Test Summary ===');

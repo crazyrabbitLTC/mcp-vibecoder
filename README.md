@@ -30,15 +30,13 @@ This MCP server helps LLMs build features in an organized, clean, and safe manne
 - `get_next_phase_action` - Get guidance on what to do next
 - `get_document_path` - Get the path of a generated document
 - `save_document` - Save a document to a specific location
-- `document_path_simple` - Alternative tool to get document paths (more reliable with some clients)
-- `document_save_simple` - Alternative tool to save documents (more reliable with some clients)
 
 ### Prompts
 - `feature-planning` - A prompt template for planning feature development
 
 ## Document Storage
 
-The server now includes a hybrid document storage system that:
+The server includes a hybrid document storage system that:
 
 1. Automatically saves generated documents (PRDs, implementation plans) to files
 2. Maintains an in-memory copy for quick access
@@ -63,16 +61,6 @@ You can use the `save_document` tool to save documents to custom locations:
 }
 ```
 
-For better compatibility with some MCP clients, use the `document_save_simple` tool instead:
-
-```json
-{
-  "featureId": "feature-123",
-  "documentType": "prd",
-  "filePath": "/custom/path/feature-123-prd.md"
-}
-```
-
 ### Path Retrieval
 
 To get the path of a document, use the `get_document_path` tool:
@@ -84,16 +72,7 @@ To get the path of a document, use the `get_document_path` tool:
 }
 ```
 
-For better compatibility with some MCP clients, use the `document_path_simple` tool instead:
-
-```json
-{
-  "featureId": "feature-123",
-  "documentType": "prd"
-}
-```
-
-These tools return both the path and whether the document has been saved to disk.
+This returns both the path and whether the document has been saved to disk.
 
 ## Development
 
@@ -187,4 +166,4 @@ The Vibe-Coder MCP server is designed to guide the development process through t
 2. **Documentation**: Generate a PRD and implementation plan based on the clarified requirements
 3. **Phased Development**: Break down the implementation into logical phases with clear tasks
 4. **Progress Tracking**: Monitor the completion of tasks and phases to guide development
-5. **Completion**: Verify that all requirements have been implemented and the feature is ready for use
+5. **Completion**: Verify that all requirements have been implemented and the feature is ready for use 
