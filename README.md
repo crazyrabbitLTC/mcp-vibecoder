@@ -30,6 +30,8 @@ This MCP server helps LLMs build features in an organized, clean, and safe manne
 - `get_next_phase_action` - Get guidance on what to do next
 - `get_document_path` - Get the path of a generated document
 - `save_document` - Save a document to a specific location
+- `document_path_simple` - Alternative tool to get document paths (more reliable with some clients)
+- `document_save_simple` - Alternative tool to save documents (more reliable with some clients)
 
 ### Prompts
 - `feature-planning` - A prompt template for planning feature development
@@ -61,6 +63,16 @@ You can use the `save_document` tool to save documents to custom locations:
 }
 ```
 
+For better compatibility with some MCP clients, use the `document_save_simple` tool instead:
+
+```json
+{
+  "featureId": "feature-123",
+  "documentType": "prd",
+  "filePath": "/custom/path/feature-123-prd.md"
+}
+```
+
 ### Path Retrieval
 
 To get the path of a document, use the `get_document_path` tool:
@@ -72,7 +84,16 @@ To get the path of a document, use the `get_document_path` tool:
 }
 ```
 
-This returns both the path and whether the document has been saved to disk.
+For better compatibility with some MCP clients, use the `document_path_simple` tool instead:
+
+```json
+{
+  "featureId": "feature-123",
+  "documentType": "prd"
+}
+```
+
+These tools return both the path and whether the document has been saved to disk.
 
 ## Development
 

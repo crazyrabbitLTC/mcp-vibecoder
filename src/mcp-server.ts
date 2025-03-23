@@ -725,6 +725,118 @@ server.tool(
   }
 );
 
+// New simplified document path tool that avoids enum serialization issues
+server.tool(
+  "document_path_simple",
+  {
+    featureId: z.string().min(1),
+    documentType: z.string().min(1)
+  },
+  async ({ featureId, documentType }) => {
+    try {
+      // Check if the feature exists
+      const feature = getFeature(featureId);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Map the string to DocumentType enum
+      let docType: DocumentType;
+      if (documentType === 'prd') {
+        docType = DocumentType.PRD;
+      } else if (documentType === 'implementation-plan') {
+        docType = DocumentType.IMPLEMENTATION_PLAN;
+      } else {
+        throw new Error(`Invalid document type: ${documentType}. Expected 'prd' or 'implementation-plan'`);
+      }
+      
+      // Check if the document exists
+      if (!documentStorage.hasDocument(featureId, docType)) {
+        throw new Error(`Document of type ${documentType} not found for feature ${featureId}`);
+      }
+      
+      // Get the default file path for the document
+      const filePath = documentStorage.getDefaultFilePath(featureId, docType);
+      
+      // Get the document to check if it's been saved
+      const document = documentStorage.getDocument(featureId, docType);
+      
+      return {
+        content: [{
+          type: "text",
+          text: `Document path: ${filePath}\nSaved to disk: ${document?.metadata.isSaved ? 'Yes' : 'No'}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: "text",
+          text: `Error retrieving document path: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// New simplified document save tool that avoids enum serialization issues
+server.tool(
+  "document_save_simple",
+  {
+    featureId: z.string().min(1),
+    documentType: z.string().min(1),
+    filePath: z.string().min(1).optional()
+  },
+  async ({ featureId, documentType, filePath }) => {
+    try {
+      // Check if the feature exists
+      const feature = getFeature(featureId);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+      
+      // Map the string to DocumentType enum
+      let docType: DocumentType;
+      if (documentType === 'prd') {
+        docType = DocumentType.PRD;
+      } else if (documentType === 'implementation-plan') {
+        docType = DocumentType.IMPLEMENTATION_PLAN;
+      } else {
+        throw new Error(`Invalid document type: ${documentType}. Expected 'prd' or 'implementation-plan'`);
+      }
+      
+      // Check if the document exists
+      if (!documentStorage.hasDocument(featureId, docType)) {
+        throw new Error(`Document of type ${documentType} not found for feature ${featureId}`);
+      }
+      
+      let savedPath: string;
+      
+      // If a custom path was provided, use it; otherwise, save to the default path
+      if (filePath) {
+        savedPath = await documentStorage.saveDocumentToCustomPath(featureId, docType, filePath);
+      } else {
+        savedPath = await documentStorage.saveDocumentToFile(featureId, docType);
+      }
+      
+      return {
+        content: [{
+          type: "text",
+          text: `Document saved successfully to: ${savedPath}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: "text",
+          text: `Error saving document: ${error instanceof Error ? error.message : String(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
 // Start the server
 async function main() {
   console.error("Starting Vibe-Coder MCP Server...");
