@@ -386,38 +386,6 @@ server.tool(
   }
 );
 
-// Generate implementation plan tool - rename to ensure it's not a name collision
-server.tool(
-  "implementation_plan_generate",
-  {
-    featureId: z.string().min(1)
-  },
-  async ({ featureId }) => {
-    const feature = getFeature(featureId);
-    if (!feature) {
-      throw new Error(`Feature ${featureId} not found`);
-    }
-    
-    // Debug log
-    console.error(`DEBUG: implementation_plan_generate called for feature ${featureId}`);
-    
-    if (!feature.prd) {
-      throw new Error("PRD not found. Please generate a PRD before generating an implementation plan.");
-    }
-    
-    const implementationPlan = generateImplementationPlan(feature);
-    feature.implementationPlan = implementationPlan;
-    updateFeature(featureId, feature);
-    
-    return {
-      content: [{
-        type: "text",
-        text: `Implementation plan generated successfully for "${feature.name}". You can view it at feature://${featureId}/implementation`
-      }]
-    };
-  }
-);
-
 // Create phase tool
 server.tool(
   "create_phase",
@@ -502,10 +470,13 @@ server.tool(
     console.error(`DEBUG: Task created with ID: ${task.id}, type: ${typeof task.id}`);
     console.error(`DEBUG: Task object: ${JSON.stringify(task)}`);
     
+    // Ensure task.id is explicitly converted to string
+    const taskId = String(task.id);
+    
     return {
       content: [{
         type: "text",
-        text: `Added task "${description.substring(0, 30)}${description.length > 30 ? '...' : ''}" with ID ${task.id} to phase "${phase.name}"`
+        text: `Added task "${description.substring(0, 30)}${description.length > 30 ? '...' : ''}" with ID: ${taskId} to phase "${phase.name}"`
       }]
     };
   }
