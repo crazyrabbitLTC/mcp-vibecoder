@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "outDir": "./build",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/mcp-server.ts", "src/types.ts", "src/storage.ts", "src/utils.ts", "src/clarification.ts", "src/documentation.ts"],
+  "exclude": ["node_modules", "src/registry.ts", "src/resource-handlers.ts", "src/tool-handlers.ts", "src/index.ts", "src/index-updated.ts"]
+} 

@@ -1,29 +1,36 @@
-# My MCP vibecoding server MCP Server
+# Vibe-Coder MCP Server
 
-A custom MCP for vibecoding
+A Model Context Protocol server that implements a structured development workflow for LLM-based coding.
 
-This is a TypeScript-based MCP server that implements a simple notes system. It demonstrates core MCP concepts by providing:
+## Overview
 
-- Resources representing text notes with URIs and metadata
-- Tools for creating new notes
-- Prompts for generating summaries of notes
+This MCP server helps LLMs build features in an organized, clean, and safe manner by providing:
+
+- A structured feature clarification process with guided questions
+- PRD and implementation plan generation
+- Phased development with task tracking
+- Progress tracking and status reporting
 
 ## Features
 
 ### Resources
-- List and access notes via `note://` URIs
-- Each note has a title, content and metadata
-- Plain text mime type for simple content access
+- Feature details, PRDs, and implementation plans
+- Progress reports and status tracking
+- Phase and task details
 
 ### Tools
-- `create_note` - Create new text notes
-  - Takes title and content as required parameters
-  - Stores note in server state
+- `start_feature_clarification` - Begin the feature clarification process
+- `provide_clarification` - Answer clarification questions about a feature
+- `generate_prd` - Generate a Product Requirements Document
+- `generate_implementation_plan` - Create a detailed implementation plan
+- `create_phase` - Create a development phase for a feature
+- `add_task` - Add tasks to a development phase
+- `update_phase_status` - Update the status of a phase
+- `update_task_status` - Update the completion status of a task
+- `get_next_phase_action` - Get guidance on what to do next
 
 ### Prompts
-- `summarize_notes` - Generate a summary of all stored notes
-  - Includes all note contents as embedded resources
-  - Returns structured prompt for LLM summarization
+- `feature-planning` - A prompt template for planning feature development
 
 ## Development
 
@@ -44,7 +51,7 @@ npm run watch
 
 ## Installation
 
-To use with Claude Desktop, add the server config:
+To use with compatible MCP clients:
 
 On MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
@@ -52,8 +59,8 @@ On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
 ```json
 {
   "mcpServers": {
-    "My MCP vibecoding server": {
-      "command": "/path/to/My MCP vibecoding server/build/index.js"
+    "vibe-coder-mcp": {
+      "command": "/path/to/vibe-coder-mcp/build/mcp-server.js"
     }
   }
 }
@@ -68,3 +75,43 @@ npm run inspector
 ```
 
 The Inspector will provide a URL to access debugging tools in your browser.
+
+## Implementation Notes
+
+This server is implemented using the high-level `McpServer` class from the Model Context Protocol TypeScript SDK, which simplifies the process of creating MCP servers by providing a clean API for defining resources, tools, and prompts.
+
+```typescript
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+// Create an MCP server
+const server = new McpServer({
+  name: "Vibe-Coder",
+  version: "0.3.0"
+});
+
+// Add a resource
+server.resource(
+  "features-list",
+  "features://list",
+  async (uri) => ({ /* ... */ })
+);
+
+// Add a tool
+server.tool(
+  "start_feature_clarification",
+  { /* parameters schema */ },
+  async (params) => ({ /* ... */ })
+);
+
+// Add a prompt
+server.prompt(
+  "feature-planning",
+  { /* parameters schema */ },
+  (params) => ({ /* ... */ })
+);
+
+// Start the server
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```

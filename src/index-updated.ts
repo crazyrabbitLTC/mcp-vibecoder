@@ -22,13 +22,10 @@ import {
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  ResourceTemplate,
 } from "@modelcontextprotocol/sdk/types.js";
 
 // Import core modules
-// Create our own ResourceTemplate class since we can't access the SDK's directly
-class ResourceTemplate {
-  constructor(public pattern: string, public metadata: any) {}
-}
 import { Feature, FeatureStorage, PhaseStatus, Phase, Task, ClarificationResponse } from './types.js';
 import { features, storeFeature, getFeature, updateFeature, listFeatures } from './storage.js';
 import { 

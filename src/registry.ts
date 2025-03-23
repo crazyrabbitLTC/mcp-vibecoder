@@ -6,10 +6,7 @@
  * These registries manage URI templates, matching, and tool handlers.
  */
 
-// Create our own ResourceTemplate class since we can't access the SDK's directly
-class ResourceTemplate {
-  constructor(public pattern: string, public metadata: any) {}
-}
+import { ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import { ErrorCode, createErrorResponse, createToolErrorResponse } from './errors.js';
 import { Feature } from './types.js';
 

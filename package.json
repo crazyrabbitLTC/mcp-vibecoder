@@ -1,23 +1,23 @@
 {
-  "name": "My MCP vibecoding server",
-  "version": "0.1.0",
+  "name": "vibe-coder-mcp",
+  "version": "0.3.0",
   "description": "A custom MCP for vibecoding",
   "private": true,
   "type": "module",
   "bin": {
-    "My MCP vibecoding server": "./build/index.js"
+    "vibe-coder-mcp": "./build/mcp-server.js"
   },
   "files": [
     "build"
   ],
   "scripts": {
-    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
-    "prepare": "npm run build",
-    "watch": "tsc --watch",
-    "inspector": "npx @modelcontextprotocol/inspector build/index.js"
+    "build": "tsc --project tsconfig.build.json && node -e \"require('fs').chmodSync('build/mcp-server.js', '755')\"",
+    "watch": "tsc --project tsconfig.build.json --watch",
+    "inspector": "npx @modelcontextprotocol/inspector build/mcp-server.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "0.6.0"
+    "@modelcontextprotocol/sdk": "1.7.0",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.24",
