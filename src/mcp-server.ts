@@ -79,6 +79,12 @@ function addTaskDirectly(feature: Feature, phaseId: string, description: string)
   }
   
   const newTask = createTaskObject(description);
+  
+  // Convert task ID to string to ensure it's not an object
+  if (typeof newTask.id !== 'string') {
+    newTask.id = String(newTask.id);
+  }
+  
   phase.tasks.push(newTask);
   phase.updatedAt = now();
   feature.updatedAt = now();
@@ -470,8 +476,14 @@ server.tool(
     console.error(`DEBUG: Task created with ID: ${task.id}, type: ${typeof task.id}`);
     console.error(`DEBUG: Task object: ${JSON.stringify(task)}`);
     
-    // Ensure task.id is explicitly converted to string
-    const taskId = String(task.id);
+    // Ensure task.id is explicitly converted to string and check if it's an object
+    let taskId: string;
+    
+    if (typeof task.id === 'object') {
+      taskId = JSON.stringify(task.id);
+    } else {
+      taskId = String(task.id);
+    }
     
     return {
       content: [{
