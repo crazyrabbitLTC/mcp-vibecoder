@@ -386,9 +386,9 @@ server.tool(
   }
 );
 
-// Generate implementation plan tool
+// Generate implementation plan tool - rename to ensure it's not a name collision
 server.tool(
-  "generate_implementation_plan",
+  "implementation_plan_generate",
   {
     featureId: z.string().min(1)
   },
@@ -397,6 +397,9 @@ server.tool(
     if (!feature) {
       throw new Error(`Feature ${featureId} not found`);
     }
+    
+    // Debug log
+    console.error(`DEBUG: implementation_plan_generate called for feature ${featureId}`);
     
     if (!feature.prd) {
       throw new Error("PRD not found. Please generate a PRD before generating an implementation plan.");
@@ -494,6 +497,10 @@ server.tool(
     
     const task = addTaskDirectly(feature, phaseId, description);
     updateFeature(featureId, feature);
+    
+    // Debug log
+    console.error(`DEBUG: Task created with ID: ${task.id}, type: ${typeof task.id}`);
+    console.error(`DEBUG: Task object: ${JSON.stringify(task)}`);
     
     return {
       content: [{
