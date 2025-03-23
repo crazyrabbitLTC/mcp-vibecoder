@@ -632,7 +632,7 @@ server.tool(
   "get_document_path",
   {
     featureId: z.string().min(1),
-    documentType: z.enum([DocumentType.PRD, DocumentType.IMPLEMENTATION_PLAN])
+    documentType: z.enum(['prd', 'implementation-plan'])
   },
   async ({ featureId, documentType }) => {
     try {
@@ -642,16 +642,19 @@ server.tool(
         throw new Error(`Feature ${featureId} not found`);
       }
       
+      // Convert string enum value to DocumentType enum
+      const docType = documentType as unknown as DocumentType;
+      
       // Check if the document exists
-      if (!documentStorage.hasDocument(featureId, documentType)) {
+      if (!documentStorage.hasDocument(featureId, docType)) {
         throw new Error(`Document of type ${documentType} not found for feature ${featureId}`);
       }
       
       // Get the default file path for the document
-      const filePath = documentStorage.getDefaultFilePath(featureId, documentType);
+      const filePath = documentStorage.getDefaultFilePath(featureId, docType);
       
       // Get the document to check if it's been saved
-      const document = documentStorage.getDocument(featureId, documentType);
+      const document = documentStorage.getDocument(featureId, docType);
       
       return {
         content: [{
@@ -676,7 +679,7 @@ server.tool(
   "save_document",
   {
     featureId: z.string().min(1),
-    documentType: z.enum([DocumentType.PRD, DocumentType.IMPLEMENTATION_PLAN]),
+    documentType: z.enum(['prd', 'implementation-plan']),
     filePath: z.string().min(1).optional()
   },
   async ({ featureId, documentType, filePath }) => {
@@ -687,8 +690,11 @@ server.tool(
         throw new Error(`Feature ${featureId} not found`);
       }
       
+      // Convert string enum value to DocumentType enum
+      const docType = documentType as unknown as DocumentType;
+      
       // Check if the document exists
-      if (!documentStorage.hasDocument(featureId, documentType)) {
+      if (!documentStorage.hasDocument(featureId, docType)) {
         throw new Error(`Document of type ${documentType} not found for feature ${featureId}`);
       }
       
@@ -696,9 +702,9 @@ server.tool(
       
       // If a custom path was provided, use it; otherwise, save to the default path
       if (filePath) {
-        savedPath = await documentStorage.saveDocumentToCustomPath(featureId, documentType, filePath);
+        savedPath = await documentStorage.saveDocumentToCustomPath(featureId, docType, filePath);
       } else {
-        savedPath = await documentStorage.saveDocumentToFile(featureId, documentType);
+        savedPath = await documentStorage.saveDocumentToFile(featureId, docType);
       }
       
       return {
