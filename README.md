@@ -1,5 +1,7 @@
 # Vibe-Coder MCP Server
 
+[![smithery badge](https://smithery.ai/badge/@crazyrabbitLTC/mcp-vibecoder)](https://smithery.ai/server/@crazyrabbitLTC/mcp-vibecoder)
+
 A Model Context Protocol server that implements a structured development workflow for LLM-based coding.
 
 ## Overview
@@ -93,6 +95,15 @@ npm run watch
 
 ## Installation
 
+### Installing via Smithery
+
+To install Vibe-Coder for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@crazyrabbitLTC/mcp-vibecoder):
+
+```bash
+npx -y @smithery/cli install @crazyrabbitLTC/mcp-vibecoder --client claude
+```
+
+### Installing Manually
 To use with compatible MCP clients:
 
 On MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
