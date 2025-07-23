@@ -2,6 +2,10 @@
 
 A Model Context Protocol server that implements a structured development workflow for LLM-based coding.
 
+<a href="https://glama.ai/mcp/servers/@crazyrabbitLTC/mcp-vibecoder">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@crazyrabbitLTC/mcp-vibecoder/badge" alt="Vibe-Coder Server MCP server" />
+</a>
+
 ## Overview
 
 This MCP server helps LLMs build features in an organized, clean, and safe manner by providing:
@@ -166,4 +170,4 @@ The Vibe-Coder MCP server is designed to guide the development process through t
 2. **Documentation**: Generate a PRD and implementation plan based on the clarified requirements
 3. **Phased Development**: Break down the implementation into logical phases with clear tasks
 4. **Progress Tracking**: Monitor the completion of tasks and phases to guide development
-5. **Completion**: Verify that all requirements have been implemented and the feature is ready for use 
+5. **Completion**: Verify that all requirements have been implemented and the feature is ready for use
